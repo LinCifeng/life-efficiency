@@ -1,26 +1,134 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #faf7f2;
+  --bg-card: #fffefb;
+  --bg-tag: #efe7d8;
+  --bg-tag-strong: #e4d7bd;
+  --fg: #2b2621;
+  --fg-muted: #7a7065;
+  --fg-soft: #a79d8e;
+  --accent: #a0845c;
+  --accent-soft: #c8b894;
+  --border: #e8e1d4;
+  --border-soft: #efeadf;
+  --success: #7a9269;
+  --danger: #b97466;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-bg: var(--bg);
+  --color-bg-card: var(--bg-card);
+  --color-bg-tag: var(--bg-tag);
+  --color-bg-tag-strong: var(--bg-tag-strong);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-soft: var(--fg-soft);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-border: var(--border);
+  --color-border-soft: var(--border-soft);
+  --color-success: var(--success);
+  --color-danger: var(--danger);
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "PingFang SC", "HarmonyOS Sans SC",
+    "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono",
+    monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+html,
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-feature-settings: "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 极简滚动条 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 隐藏 number input 的 spin 按钮 */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* 纸感标签：模拟手帐本上"今日清单"这种圆角棕底白字标签 */
+.tag-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.75rem;
+  background: var(--bg-tag-strong);
+  color: var(--fg);
+  border-radius: 9999px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1.25rem;
+}
+
+.card-bare {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+.btn-ghost {
+  padding: 0.5rem 0.875rem;
+  border-radius: 9999px;
+  color: var(--fg-muted);
+  transition: background 0.15s;
+}
+.btn-ghost:hover {
+  background: var(--border-soft);
+}
+
+.btn-primary {
+  padding: 0.5rem 1rem;
+  border-radius: 9999px;
+  background: var(--accent);
+  color: #fff;
+  transition: background 0.15s;
+}
+.btn-primary:hover {
+  background: #8b724e;
+}
+
+.divider {
+  height: 1px;
+  background: var(--border-soft);
+}
+
+/* 用于占位符淡色 */
+input::placeholder,
+textarea::placeholder {
+  color: var(--fg-soft);
 }
