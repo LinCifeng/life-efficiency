@@ -179,19 +179,36 @@ export function TaskBoard({
       onDragEnd={handleDragEnd}
       onDragCancel={() => setActiveId(null)}
     >
-      <div className="flex flex-col gap-6 lg:grid lg:grid-cols-2 lg:gap-x-6">
-        {SIZES.map((size) => (
-          <Section
-            key={size}
-            size={size}
-            items={grouped[size]}
-            onChange={(next) => {
-              const rest = tasks.filter((t) => t.size !== size);
-              onChange([...rest, ...next]);
-            }}
-            onAddExtra={size === "extra" ? onAddExtra : undefined}
-          />
-        ))}
+      {/* 双栏分配：左列 = 最重要 + 三个中等（~4 条），右列 = 五个小型 + 其他（~5 条以上），
+          两列高度更接近，不会像一开始那样一个卡片极矮一个极高。 */}
+      <div className="flex flex-col gap-6 lg:grid lg:grid-cols-2 lg:items-start lg:gap-x-6">
+        <div className="flex flex-col gap-6">
+          {(["big", "medium"] as Size[]).map((size) => (
+            <Section
+              key={size}
+              size={size}
+              items={grouped[size]}
+              onChange={(next) => {
+                const rest = tasks.filter((t) => t.size !== size);
+                onChange([...rest, ...next]);
+              }}
+            />
+          ))}
+        </div>
+        <div className="flex flex-col gap-6">
+          {(["small", "extra"] as Size[]).map((size) => (
+            <Section
+              key={size}
+              size={size}
+              items={grouped[size]}
+              onChange={(next) => {
+                const rest = tasks.filter((t) => t.size !== size);
+                onChange([...rest, ...next]);
+              }}
+              onAddExtra={size === "extra" ? onAddExtra : undefined}
+            />
+          ))}
+        </div>
       </div>
       <DragOverlay>
         {activeTask ? (

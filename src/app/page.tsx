@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import Link from "next/link";
 import {
   cryptoId,
@@ -27,14 +27,6 @@ export default function TodayPage() {
   const [date, setDate] = useState(() => formatDate(new Date()));
   const [paintMode, setPaintMode] = useState<PaintMode | null>("personal");
   const [activeSlot, setActiveSlot] = useState<number | null>(null);
-  const [showAboutHint, setShowAboutHint] = useState(false);
-
-  useEffect(() => {
-    try {
-      const seen = localStorage.getItem("life-efficiency:seen-about");
-      if (!seen) setShowAboutHint(true);
-    } catch {}
-  }, []);
 
   const entry = useDaily(date);
   const update = (next: DailyEntry) => {
@@ -69,7 +61,7 @@ export default function TodayPage() {
 
   return (
     <div className="flex flex-col gap-7">
-      {/* 顶部：日期 + 进度 */}
+      {/* 顶部：日期 + 进度 + 写在前面入口（常驻，低调） */}
       <div className="flex flex-col gap-3">
         <DateSwitcher date={date} onChange={setDate} />
         <div className="flex items-center gap-3 text-xs text-[color:var(--fg-muted)]">
@@ -82,20 +74,14 @@ export default function TodayPage() {
           <span className="tabular-nums">
             {doneCount} / {totalCount}
           </span>
-        </div>
-        {showAboutHint && (
           <Link
             href="/about"
-            onClick={() => setShowAboutHint(false)}
-            className="flex items-center justify-between rounded-lg border border-dashed border-[color:var(--accent-soft)] bg-[color:var(--bg-card)] px-3 py-2 text-xs text-[color:var(--fg-muted)] transition-colors hover:border-[color:var(--accent)]"
+            className="whitespace-nowrap text-[11px] text-[color:var(--fg-soft)] transition-colors hover:text-[color:var(--accent)]"
+            title="写在前面 · 135 原则"
           >
-            <span>
-              <span className="mr-1 text-[color:var(--accent)]">✦</span>
-              新手？先看一下「写在前面」与 135 原则的使用方法
-            </span>
-            <span className="text-[color:var(--accent)]">→</span>
+            写在前面 →
           </Link>
-        )}
+        </div>
       </div>
 
       {/* 135 任务看板（可拖动、跨级） */}
