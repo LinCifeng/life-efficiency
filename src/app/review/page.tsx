@@ -13,6 +13,7 @@ import {
   type TimeCategory,
 } from "@/lib/db";
 import { useDailyRange } from "@/lib/hooks";
+import { IMETextarea } from "@/components/IMEInput";
 import { SectionLabel } from "@/components/SectionLabel";
 import clsx from "clsx";
 
@@ -193,12 +194,12 @@ function Prompt({
           <li key={h}>· {h}</li>
         ))}
       </ul>
-      <textarea
+      <IMETextarea
         value={value}
-        onChange={(e) => onChange(e.target.value)}
-        rows={4}
+        onChange={onChange}
+        rows={5}
         placeholder="写下你的思考……"
-        className="w-full resize-none rounded-lg border border-[color:var(--border)] bg-transparent p-2 text-sm leading-relaxed outline-none focus:border-[color:var(--accent-soft)]"
+        className="w-full resize-y rounded-lg border border-[color:var(--border)] bg-transparent p-3 text-sm leading-7 outline-none focus:border-[color:var(--accent-soft)]"
       />
     </div>
   );
@@ -344,12 +345,12 @@ function YearReview() {
             认真写下每一个愿望，并适时安排在每日清单里。愿望才会化为现实。内容不必宏大，
             写得越具体越好。每个小改变，都将汇聚成你人生中了不起的进步。
           </p>
-          <textarea
+          <IMETextarea
             value={current.wishes ?? ""}
-            onChange={(e) => patch({ wishes: e.target.value })}
-            rows={8}
+            onChange={(v) => patch({ wishes: v })}
+            rows={10}
             placeholder={`1. 阅读是心灵之丰悦的最小行动，并做笔记\n2. 坚持健身5次/周以上\n3. 每周户外运动至少2-3小时\n4. 每6个月参加一次公益活动，结交新朋友`}
-            className="w-full resize-none rounded-lg border border-[color:var(--border)] bg-transparent p-3 text-sm leading-relaxed outline-none focus:border-[color:var(--accent-soft)]"
+            className="w-full resize-y rounded-lg border border-[color:var(--border)] bg-transparent p-3 text-sm leading-7 outline-none focus:border-[color:var(--accent-soft)]"
           />
         </div>
       </section>

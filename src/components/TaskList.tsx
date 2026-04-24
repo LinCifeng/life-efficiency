@@ -1,6 +1,7 @@
 "use client";
 
 import type { Task } from "@/lib/db";
+import { IMEInput } from "@/components/IMEInput";
 import clsx from "clsx";
 
 export function TaskList({
@@ -20,20 +21,13 @@ export function TaskList({
   }
 
   return (
-    <div>
-      {(showPlanned || showEstimate) && (
-        <div className="mb-1.5 flex items-center gap-2 pr-1 text-[11px] text-[color:var(--fg-soft)]">
-          <span className="flex-1 pl-8">我选择做</span>
-          {showPlanned && <span className="w-24 text-center">时间</span>}
-          {showEstimate && <span className="w-16 text-right">预计用时</span>}
-        </div>
-      )}
-      <ul className="space-y-1">
-        {tasks.map((t) => (
-          <li
-            key={t.id}
-            className="group flex items-center gap-2 rounded-lg px-1 py-1.5 transition-colors hover:bg-[color:var(--border-soft)]/40"
-          >
+    <ul className="divide-y divide-[color:var(--border-soft)]">
+      {tasks.map((t) => (
+        <li
+          key={t.id}
+          className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0"
+        >
+          <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={() => patch(t.id, { done: !t.done })}
@@ -60,41 +54,73 @@ export function TaskList({
                 </svg>
               )}
             </button>
-            <input
-              type="text"
+            <IMEInput
               value={t.title}
-              onChange={(e) => patch(t.id, { title: e.target.value })}
-              placeholder="..."
+              onChange={(v) => patch(t.id, { title: v })}
+              placeholder="我选择做……"
               className={clsx(
-                "flex-1 bg-transparent text-sm outline-none placeholder:text-[color:var(--fg-soft)]",
+                "flex-1 bg-transparent py-1 text-[15px] leading-6 outline-none placeholder:text-[color:var(--fg-soft)]",
                 t.done && "text-[color:var(--fg-soft)] line-through",
               )}
             />
-            {showPlanned && (
-              <input
-                type="text"
-                value={t.plannedAt ?? ""}
-                onChange={(e) => patch(t.id, { plannedAt: e.target.value })}
-                placeholder="—"
-                className="w-24 bg-transparent text-center text-xs tabular-nums text-[color:var(--fg-muted)] outline-none placeholder:text-[color:var(--fg-soft)]/60"
-              />
-            )}
-            {showEstimate && (
-              <input
-                type="text"
-                value={t.actualMin != null ? formatMin(t.actualMin) : ""}
-                onChange={(e) => {
-                  const v = parseMin(e.target.value);
-                  patch(t.id, { actualMin: v });
-                }}
-                placeholder="—"
-                className="w-16 bg-transparent text-right text-xs tabular-nums text-[color:var(--fg-muted)] outline-none placeholder:text-[color:var(--fg-soft)]/60"
-              />
-            )}
-          </li>
-        ))}
-      </ul>
+          </div>
+          {(showPlanned || showEstimate) && (
+            <div className="ml-8 flex items-center gap-3 text-xs text-[color:var(--fg-muted)]">
+              {showPlanned && (
+                <SubField label="时间">
+                  <IMEInput
+                    value={t.plannedAt ?? ""}
+                    onChange={(v) => patch(t.id, { plannedAt: v })}
+                    placeholder="09:00-11:00"
+                    className="w-24 bg-transparent tabular-nums outline-none placeholder:text-[color:var(--fg-soft)]/60"
+                  />
+                </SubField>
+              )}
+              {showEstimate && (
+                <SubField label="用时">
+                  <DurationField
+                    value={t.actualMin}
+                    onChange={(v) => patch(t.id, { actualMin: v })}
+                  />
+                </SubField>
+              )}
+            </div>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function SubField({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="text-[color:var(--fg-soft)]">{label}</span>
+      {children}
     </div>
+  );
+}
+
+function DurationField({
+  value,
+  onChange,
+}: {
+  value?: number;
+  onChange: (v: number | undefined) => void;
+}) {
+  return (
+    <IMEInput
+      value={value != null ? formatMin(value) : ""}
+      onChange={(v) => onChange(parseMin(v))}
+      placeholder="2小时"
+      className="w-20 bg-transparent tabular-nums outline-none placeholder:text-[color:var(--fg-soft)]/60"
+    />
   );
 }
 

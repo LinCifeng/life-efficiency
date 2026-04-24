@@ -32,6 +32,12 @@ export interface Task {
   done: boolean;
 }
 
+export interface TimeLog {
+  id: string;
+  slotIndex: number; // 0~47，对应半小时格
+  text: string;
+}
+
 export interface DailyEntry {
   date: string; // YYYY-MM-DD，主键
   slots: TimeSlot[]; // 长度 48
@@ -43,6 +49,7 @@ export interface DailyEntry {
   };
   tasks: Task[]; // 1 big + 3 medium + 5 small + N extra
   notes?: string; // 其他/临时任务
+  timeLogs?: TimeLog[]; // 每半小时做了什么的记录
 }
 
 export interface EnergyEntry {

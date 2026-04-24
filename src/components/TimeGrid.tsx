@@ -1,6 +1,10 @@
 "use client";
 
-import { TIME_CATEGORY_META, type TimeCategory, type TimeSlot } from "@/lib/db";
+import {
+  TIME_CATEGORY_META,
+  type TimeCategory,
+  type TimeSlot,
+} from "@/lib/db";
 import clsx from "clsx";
 
 // 半小时格 -> 轮换下一个状态
@@ -14,68 +18,110 @@ function nextSlot(current: TimeSlot, selected: TimeCategory | null): TimeSlot {
   return CYCLE[(i + 1) % CYCLE.length];
 }
 
+const BANDS: Array<{ start: number; label: string }> = [
+  { start: 0, label: "凌晨" },
+  { start: 4, label: "清晨" },
+  { start: 8, label: "上午" },
+  { start: 12, label: "下午" },
+  { start: 16, label: "傍晚" },
+  { start: 20, label: "夜晚" },
+];
+
+export function slotLabel(i: number): string {
+  const h = Math.floor(i / 2);
+  const m = i % 2 === 0 ? "00" : "30";
+  return `${String(h).padStart(2, "0")}:${m}`;
+}
+
+export function slotRangeLabel(i: number): string {
+  const start = slotLabel(i);
+  const nextH = Math.floor((i + 1) / 2);
+  const nextM = (i + 1) % 2 === 0 ? "00" : "30";
+  const end = `${String(nextH % 24).padStart(2, "0")}:${nextM}`;
+  return `${start}–${end}`;
+}
+
 export function TimeGrid({
   slots,
   selectedCategory,
+  activeSlot,
   onChange,
+  onPickSlot,
 }: {
   slots: TimeSlot[];
   selectedCategory: TimeCategory | null;
+  activeSlot: number | null;
   onChange: (slots: TimeSlot[]) => void;
+  onPickSlot: (i: number) => void;
 }) {
-  // 48 格：每格 30 分钟；按 6 列排成 8 行，每行 3 小时
-  const rows: number[][] = [];
-  for (let r = 0; r < 8; r++) {
-    rows.push(Array.from({ length: 6 }, (_, i) => r * 6 + i));
-  }
-
   function setSlot(i: number) {
     const next = [...slots];
     next[i] = nextSlot(slots[i], selectedCategory);
     onChange(next);
+    onPickSlot(i);
   }
 
   return (
-    <div className="flex flex-col gap-1.5">
-      {rows.map((row, rIdx) => {
-        const startHour = rIdx * 3;
+    <div className="flex flex-col gap-3">
+      {BANDS.map((band) => {
+        // 每个时段 4 小时 = 8 格
+        const indices = Array.from({ length: 8 }, (_, k) => band.start * 2 + k);
         return (
-          <div key={rIdx} className="flex items-center gap-2">
-            <div className="w-10 text-right text-[10px] tabular-nums text-[color:var(--fg-soft)]">
-              {String(startHour).padStart(2, "0")}
+          <div key={band.start} className="flex items-stretch gap-3">
+            {/* 左侧时段标签 */}
+            <div className="flex w-12 shrink-0 flex-col justify-center">
+              <div className="text-[13px] font-medium text-[color:var(--fg)]">
+                {band.label}
+              </div>
+              <div className="text-[10px] tabular-nums text-[color:var(--fg-soft)]">
+                {String(band.start).padStart(2, "0")}:00–
+                {String(band.start + 4).padStart(2, "0")}:00
+              </div>
             </div>
-            <div className="grid flex-1 grid-cols-6 gap-1">
-              {row.map((i) => {
-                const s = slots[i];
-                const meta = s ? TIME_CATEGORY_META[s] : null;
-                return (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => setSlot(i)}
-                    aria-label={`${Math.floor(i / 2)}:${i % 2 ? "30" : "00"}`}
-                    className={clsx(
-                      "flex aspect-square items-center justify-center rounded-[6px] text-sm transition-colors",
-                      "border border-[color:var(--border)]",
-                      !s && "bg-transparent hover:bg-[color:var(--border-soft)]",
-                    )}
-                    style={
-                      s
-                        ? {
-                            backgroundColor: meta!.color + "33",
-                            borderColor: meta!.color + "80",
-                            color: "var(--fg)",
-                          }
-                        : undefined
-                    }
-                  >
-                    {meta?.symbol ?? ""}
-                  </button>
-                );
-              })}
-            </div>
-            <div className="w-10 text-left text-[10px] tabular-nums text-[color:var(--fg-soft)]">
-              {String(startHour + 3).padStart(2, "0")}
+
+            {/* 格子 + 刻度 */}
+            <div className="flex-1">
+              <div className="grid grid-cols-8 gap-1">
+                {indices.map((i) => {
+                  const s = slots[i];
+                  const meta = s ? TIME_CATEGORY_META[s] : null;
+                  const isActive = activeSlot === i;
+                  return (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => setSlot(i)}
+                      aria-label={slotRangeLabel(i)}
+                      title={slotRangeLabel(i)}
+                      className={clsx(
+                        "flex aspect-square items-center justify-center rounded-[6px] border text-sm transition-all",
+                        isActive && "ring-2 ring-[color:var(--accent)]",
+                        !s && "bg-transparent hover:bg-[color:var(--border-soft)]",
+                        !s && "border-[color:var(--border)]",
+                      )}
+                      style={
+                        s
+                          ? {
+                              backgroundColor: meta!.color + "33",
+                              borderColor: meta!.color + "80",
+                              color: "var(--fg)",
+                            }
+                          : undefined
+                      }
+                    >
+                      {meta?.symbol ?? ""}
+                    </button>
+                  );
+                })}
+              </div>
+              {/* 整点刻度：2 格对应一个整点 */}
+              <div className="mt-1 grid grid-cols-8 text-[10px] tabular-nums text-[color:var(--fg-soft)]">
+                {indices.map((i, k) => (
+                  <div key={i} className="text-center">
+                    {k % 2 === 0 ? String(Math.floor(i / 2)).padStart(2, "0") : ""}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         );
@@ -108,19 +154,17 @@ export function CategoryPicker({
                 ? "border-[color:var(--accent)] text-[color:var(--fg)]"
                 : "border-[color:var(--border)] text-[color:var(--fg-muted)] hover:border-[color:var(--accent-soft)]",
             )}
-            style={
-              active
-                ? { backgroundColor: meta.color + "33" }
-                : undefined
-            }
+            style={active ? { backgroundColor: meta.color + "33" } : undefined}
           >
-            <span style={{ color: meta.color, fontWeight: 600 }}>{meta.symbol}</span>
+            <span style={{ color: meta.color, fontWeight: 600 }}>
+              {meta.symbol}
+            </span>
             <span>{meta.label}</span>
           </button>
         );
       })}
       <span className="ml-1 text-[11px] text-[color:var(--fg-soft)]">
-        选中后点击格子即可快速填；再次点击清空
+        选中后点格子批量填；未选时点格子循环切换
       </span>
     </div>
   );
@@ -148,7 +192,9 @@ export function TimeSummary({ slots }: { slots: TimeSlot[] }) {
             <span style={{ color: meta.color }}>{meta.symbol}</span>
             <span className="text-[color:var(--fg-muted)]">{meta.label}</span>
             <span className="tabular-nums text-[color:var(--fg)]">{hours}h</span>
-            <span className="tabular-nums text-[color:var(--fg-soft)]">{pct}%</span>
+            <span className="tabular-nums text-[color:var(--fg-soft)]">
+              {pct}%
+            </span>
           </div>
         );
       })}

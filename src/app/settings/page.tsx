@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import Link from "next/link";
 import { exportAll, importAll, db, type ExportPayload } from "@/lib/db";
 import { SectionLabel } from "@/components/SectionLabel";
 
@@ -51,6 +52,24 @@ export default function SettingsPage() {
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-xl font-medium tracking-tight">设置</h1>
+
+      <section className="space-y-3">
+        <SectionLabel>使用说明</SectionLabel>
+        <Link
+          href="/about"
+          className="card flex items-center justify-between gap-3 transition-colors hover:border-[color:var(--accent-soft)]"
+        >
+          <div>
+            <div className="text-sm text-[color:var(--fg)]">
+              写在前面 · 六步使用法 · 135 原则
+            </div>
+            <div className="mt-0.5 text-[11px] text-[color:var(--fg-soft)]">
+              为什么要做效率清单，以及如何一步步用它规划人生。
+            </div>
+          </div>
+          <span className="text-[color:var(--fg-soft)]">→</span>
+        </Link>
+      </section>
 
       <section className="space-y-3">
         <SectionLabel>数据备份</SectionLabel>

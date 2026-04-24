@@ -1,12 +1,14 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import Link from "next/link";
 import {
   cryptoId,
   formatDate,
   type DailyEntry,
   type Task,
   type TimeCategory,
+  type TimeLog,
   type TimeSlot,
 } from "@/lib/db";
 import { saveDaily, useDaily } from "@/lib/hooks";
@@ -19,11 +21,22 @@ import {
 } from "@/components/TimeGrid";
 import { BudgetInput } from "@/components/BudgetInput";
 import { TaskList } from "@/components/TaskList";
+import { TimeLogList } from "@/components/TimeLogList";
+import { IMETextarea } from "@/components/IMEInput";
 
 export default function TodayPage() {
   const [date, setDate] = useState(() => formatDate(new Date()));
   const [selectedCategory, setSelectedCategory] =
     useState<TimeCategory | null>("personal");
+  const [activeSlot, setActiveSlot] = useState<number | null>(null);
+  const [showAboutHint, setShowAboutHint] = useState(false);
+
+  useEffect(() => {
+    try {
+      const seen = localStorage.getItem("life-efficiency:seen-about");
+      if (!seen) setShowAboutHint(true);
+    } catch {}
+  }, []);
 
   const entry = useDaily(date);
   const update = (next: DailyEntry) => {
@@ -46,15 +59,16 @@ export default function TodayPage() {
   function updateTasksOf(size: Task["size"], next: Task[]) {
     update({
       ...entry,
-      tasks: [
-        ...entry.tasks.filter((t) => t.size !== size),
-        ...next,
-      ],
+      tasks: [...entry.tasks.filter((t) => t.size !== size), ...next],
     });
   }
 
   function updateSlots(next: TimeSlot[]) {
     update({ ...entry, slots: next });
+  }
+
+  function updateTimeLogs(next: TimeLog[]) {
+    update({ ...entry, timeLogs: next });
   }
 
   function addExtra() {
@@ -83,36 +97,20 @@ export default function TodayPage() {
             {doneCount} / {totalCount}
           </span>
         </div>
+        {showAboutHint && (
+          <Link
+            href="/about"
+            onClick={() => setShowAboutHint(false)}
+            className="flex items-center justify-between rounded-lg border border-dashed border-[color:var(--accent-soft)] bg-[color:var(--bg-card)] px-3 py-2 text-xs text-[color:var(--fg-muted)] transition-colors hover:border-[color:var(--accent)]"
+          >
+            <span>
+              <span className="mr-1 text-[color:var(--accent)]">✦</span>
+              新手？先看一下「写在前面」与 135 原则的使用方法
+            </span>
+            <span className="text-[color:var(--accent)]">→</span>
+          </Link>
+        )}
       </div>
-
-      {/* 24 小时时间格 */}
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <SectionLabel>今日清单</SectionLabel>
-          <CategoryPickerMobileHint />
-        </div>
-        <div className="card space-y-3">
-          <CategoryPicker
-            value={selectedCategory}
-            onChange={setSelectedCategory}
-          />
-          <TimeGrid
-            slots={entry.slots}
-            selectedCategory={selectedCategory}
-            onChange={updateSlots}
-          />
-          <div className="divider" />
-          <TimeSummary slots={entry.slots} />
-        </div>
-      </section>
-
-      {/* 时间预算 */}
-      <section className="space-y-3">
-        <SectionLabel>可支配时间预估</SectionLabel>
-        <div className="card">
-          <BudgetInput value={entry} onChange={update} />
-        </div>
-      </section>
 
       {/* 最重要的任务 */}
       <section className="space-y-3">
@@ -180,12 +178,58 @@ export default function TodayPage() {
             />
           )}
           <div className="divider" />
-          <textarea
+          <IMETextarea
             value={entry.notes ?? ""}
-            onChange={(e) => update({ ...entry, notes: e.target.value })}
+            onChange={(v) => update({ ...entry, notes: v })}
             placeholder="随手记录：贴发票、改下 PPT、扫描合同……"
-            rows={2}
-            className="w-full resize-none bg-transparent text-sm outline-none placeholder:text-[color:var(--fg-soft)]"
+            rows={3}
+            className="w-full resize-y bg-transparent text-sm leading-6 outline-none placeholder:text-[color:var(--fg-soft)]"
+          />
+        </div>
+      </section>
+
+      {/* 时间预算 */}
+      <section className="space-y-3">
+        <SectionLabel>可支配时间预估</SectionLabel>
+        <div className="card">
+          <BudgetInput value={entry} onChange={update} />
+        </div>
+      </section>
+
+      {/* 24 小时时间格 */}
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <SectionLabel>24 小时 · 时间分配</SectionLabel>
+          <span className="hidden text-[11px] text-[color:var(--fg-soft)] sm:inline">
+            每格 30 分钟 · 6 段式排布
+          </span>
+        </div>
+        <div className="card space-y-3">
+          <CategoryPicker
+            value={selectedCategory}
+            onChange={setSelectedCategory}
+          />
+          <TimeGrid
+            slots={entry.slots}
+            selectedCategory={selectedCategory}
+            activeSlot={activeSlot}
+            onChange={updateSlots}
+            onPickSlot={setActiveSlot}
+          />
+          <div className="divider" />
+          <TimeSummary slots={entry.slots} />
+        </div>
+      </section>
+
+      {/* 时间日志：每半小时做了什么 */}
+      <section className="space-y-3">
+        <SectionLabel>今日时间日志</SectionLabel>
+        <div className="card">
+          <TimeLogList
+            logs={entry.timeLogs ?? []}
+            activeSlot={activeSlot}
+            onChange={updateTimeLogs}
+            onFocusSlot={setActiveSlot}
           />
         </div>
       </section>
@@ -194,13 +238,5 @@ export default function TodayPage() {
         「我选择做」· 135 原则 · 1 大 + 3 中 + 5 小
       </p>
     </div>
-  );
-}
-
-function CategoryPickerMobileHint() {
-  return (
-    <span className="hidden text-[11px] text-[color:var(--fg-soft)] sm:inline">
-      点击格子记录时间
-    </span>
   );
 }
