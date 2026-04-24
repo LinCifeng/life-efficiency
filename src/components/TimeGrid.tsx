@@ -137,44 +137,53 @@ export function TimeGrid({
             </div>
 
             <div className="flex-1">
-              <div className="grid grid-cols-8 gap-1">
-                {indices.map((i) => {
-                  const s = slots[i];
-                  const meta = s ? TIME_CATEGORY_META[s] : null;
-                  const isActive = activeSlot === i;
+              {/* 4 对半小时格：对内紧贴、对间留较大间距，便于视觉分辨小时边界 */}
+              <div className="flex items-start gap-2">
+                {[0, 1, 2, 3].map((p) => {
+                  const pairIndices = [indices[p * 2], indices[p * 2 + 1]];
                   return (
-                    <button
-                      key={i}
-                      type="button"
-                      data-slot={i}
-                      onPointerDown={(e) => handlePointerDown(e, i)}
-                      aria-label={slotRangeLabel(i)}
-                      title={slotRangeLabel(i)}
-                      className={clsx(
-                        "flex aspect-square items-center justify-center rounded-[6px] border text-sm transition-all",
-                        isActive && "ring-2 ring-[color:var(--accent)]",
-                        !s && "bg-transparent hover:bg-[color:var(--border-soft)]",
-                        !s && "border-[color:var(--border)]",
-                      )}
-                      style={
-                        s
-                          ? {
-                              backgroundColor: meta!.color + "33",
-                              borderColor: meta!.color + "80",
-                              color: "var(--fg)",
+                    <div key={p} className="flex flex-1 gap-[2px]">
+                      {pairIndices.map((i) => {
+                        const s = slots[i];
+                        const meta = s ? TIME_CATEGORY_META[s] : null;
+                        const isActive = activeSlot === i;
+                        return (
+                          <button
+                            key={i}
+                            type="button"
+                            data-slot={i}
+                            onPointerDown={(e) => handlePointerDown(e, i)}
+                            aria-label={slotRangeLabel(i)}
+                            title={slotRangeLabel(i)}
+                            className={clsx(
+                              "flex aspect-square flex-1 items-center justify-center rounded-[6px] border text-sm transition-all",
+                              isActive && "ring-2 ring-[color:var(--accent)]",
+                              !s && "bg-transparent hover:bg-[color:var(--border-soft)]",
+                              !s && "border-[color:var(--border)]",
+                            )}
+                            style={
+                              s
+                                ? {
+                                    backgroundColor: meta!.color + "33",
+                                    borderColor: meta!.color + "80",
+                                    color: "var(--fg)",
+                                  }
+                                : undefined
                             }
-                          : undefined
-                      }
-                    >
-                      {meta?.symbol ?? ""}
-                    </button>
+                          >
+                            {meta?.symbol ?? ""}
+                          </button>
+                        );
+                      })}
+                    </div>
                   );
                 })}
               </div>
-              <div className="mt-1 grid grid-cols-8 text-[10px] tabular-nums text-[color:var(--fg-soft)]">
-                {indices.map((i, k) => (
-                  <div key={i} className="text-center">
-                    {k % 2 === 0 ? String(Math.floor(i / 2)).padStart(2, "0") : ""}
+              {/* 每个小时下方居中只写一个整点数字 */}
+              <div className="mt-1 flex gap-2 text-[10px] tabular-nums text-[color:var(--fg-soft)]">
+                {[0, 1, 2, 3].map((p) => (
+                  <div key={p} className="flex-1 text-center">
+                    {String(band.start + p).padStart(2, "0")}
                   </div>
                 ))}
               </div>

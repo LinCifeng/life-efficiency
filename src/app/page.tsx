@@ -21,7 +21,6 @@ import {
 import { BudgetInput } from "@/components/BudgetInput";
 import { TaskBoard } from "@/components/TaskBoard";
 import { TimeLogList } from "@/components/TimeLogList";
-import { IMETextarea } from "@/components/IMEInput";
 
 export default function TodayPage() {
   const [date, setDate] = useState(() => formatDate(new Date()));
@@ -90,20 +89,6 @@ export default function TodayPage() {
         onChange={(next) => update({ ...entry, tasks: next })}
         onAddExtra={addExtra}
       />
-
-      {/* 随手记录 */}
-      <section className="space-y-3">
-        <SectionLabel>随手记录</SectionLabel>
-        <div className="card">
-          <IMETextarea
-            value={entry.notes ?? ""}
-            onChange={(v) => update({ ...entry, notes: v })}
-            placeholder="贴发票、改 PPT、扫描合同……"
-            rows={3}
-            className="w-full resize-y bg-transparent text-sm leading-6 outline-none placeholder:text-[color:var(--fg-soft)]"
-          />
-        </div>
-      </section>
 
       {/* 可支配时间预估 */}
       <section className="space-y-3">

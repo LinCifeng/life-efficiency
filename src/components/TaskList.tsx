@@ -166,11 +166,22 @@ function DurationField({
     onChange(parsed);
   }
 
+  /**
+   * 增/减 0.5h。优先以当前 draft（用户正在输入的中间值）为准，
+   * 其次用 value。这样点按钮时体验连贯，不会被 input 未提交的值覆盖。
+   */
   function step(delta: number) {
-    const cur = value != null ? value / 60 : 0;
+    const parsedDraft = parseDuration(draft);
+    const cur =
+      parsedDraft != null
+        ? parsedDraft / 60
+        : value != null
+        ? value / 60
+        : 0;
     const next = Math.max(0, Math.round((cur + delta) * 2) / 2);
+    const nextMin = next === 0 ? undefined : next * 60;
     setDraft(next === 0 ? "" : String(next));
-    onChange(next === 0 ? undefined : next * 60);
+    onChange(nextMin);
   }
 
   if (!editing) {
@@ -199,9 +210,10 @@ function DurationField({
     <div className="flex shrink-0 items-center gap-0.5 rounded-md border border-[color:var(--accent-soft)] bg-[color:var(--bg-card)] px-1">
       <button
         type="button"
+        onPointerDown={(e) => e.preventDefault()}
         onClick={() => step(-0.5)}
         aria-label="减少 0.5 小时"
-        className="h-5 w-5 rounded text-[color:var(--fg-soft)] hover:bg-[color:var(--border-soft)] hover:text-[color:var(--fg)]"
+        className="h-6 w-6 rounded text-[color:var(--fg-muted)] hover:bg-[color:var(--border-soft)] hover:text-[color:var(--fg)]"
       >
         −
       </button>
@@ -231,9 +243,10 @@ function DurationField({
       <span className="px-0.5 text-[10px] text-[color:var(--fg-soft)]">h</span>
       <button
         type="button"
+        onPointerDown={(e) => e.preventDefault()}
         onClick={() => step(0.5)}
         aria-label="增加 0.5 小时"
-        className="h-5 w-5 rounded text-[color:var(--fg-soft)] hover:bg-[color:var(--border-soft)] hover:text-[color:var(--fg)]"
+        className="h-6 w-6 rounded text-[color:var(--fg-muted)] hover:bg-[color:var(--border-soft)] hover:text-[color:var(--fg)]"
       >
         ＋
       </button>
