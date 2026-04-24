@@ -3,7 +3,10 @@
 import { cryptoId, type TimeLog } from "@/lib/db";
 import { IMEInput } from "@/components/IMEInput";
 import { slotRangeLabel } from "@/components/TimeGrid";
-import { useEffect, useMemo, useRef } from "react";
+import clsx from "clsx";
+import { useEffect, useMemo, useRef, useState } from "react";
+
+const SCORE_LABEL = ["低效", "偏低", "一般", "偏高", "高效"];
 
 export function TimeLogList({
   logs,
@@ -22,15 +25,6 @@ export function TimeLogList({
   );
   const newInputRef = useRef<HTMLInputElement>(null);
 
-  // 外部点击时间格时，若该格暂无日志则准备一条，并 focus 进输入框
-  useEffect(() => {
-    if (activeSlot == null) return;
-    const exists = logs.some((l) => l.slotIndex === activeSlot);
-    if (!exists && newInputRef.current) {
-      newInputRef.current.focus();
-    }
-  }, [activeSlot, logs]);
-
   function patch(id: string, partial: Partial<TimeLog>) {
     onChange(logs.map((l) => (l.id === id ? { ...l, ...partial } : l)));
   }
@@ -39,17 +33,16 @@ export function TimeLogList({
     onChange(logs.filter((l) => l.id !== id));
   }
 
-  function addLog(slotIndex: number, text: string) {
+  function addLog(slotIndex: number, text: string, efficiency?: number) {
     if (!text.trim()) return;
     onChange([
       ...logs,
-      { id: cryptoId(), slotIndex, text: text.trim() },
+      { id: cryptoId(), slotIndex, text: text.trim(), efficiency },
     ]);
   }
 
   return (
     <div className="space-y-3">
-      {/* 快速新增 */}
       <QuickAdd
         inputRef={newInputRef}
         activeSlot={activeSlot}
@@ -59,17 +52,16 @@ export function TimeLogList({
         }}
       />
 
-      {/* 已有日志 */}
       {sorted.length === 0 ? (
         <div className="rounded-lg border border-dashed border-[color:var(--border)] px-3 py-4 text-center text-xs text-[color:var(--fg-soft)]">
-          还没有记录。点击上方的时间格，或直接在下拉里选时段，写下这半小时你在做什么。
+          还没有记录。点击上方时间格会自动定位，或在下拉里选时段，写下这半小时你在做什么。
         </div>
       ) : (
         <ul className="divide-y divide-[color:var(--border-soft)]">
           {sorted.map((log) => (
             <li
               key={log.id}
-              className="flex items-center gap-3 py-2"
+              className="flex flex-wrap items-center gap-x-3 gap-y-2 py-2.5 sm:flex-nowrap"
               onFocus={() => onFocusSlot(log.slotIndex)}
             >
               <span className="w-24 shrink-0 tabular-nums text-xs text-[color:var(--fg-muted)]">
@@ -78,8 +70,12 @@ export function TimeLogList({
               <IMEInput
                 value={log.text}
                 onChange={(v) => patch(log.id, { text: v })}
-                className="flex-1 bg-transparent text-sm outline-none placeholder:text-[color:var(--fg-soft)]"
+                className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-[color:var(--fg-soft)]"
                 placeholder="做了什么？"
+              />
+              <EfficiencyPicker
+                value={log.efficiency}
+                onChange={(v) => patch(log.id, { efficiency: v })}
               />
               <button
                 type="button"
@@ -108,6 +104,40 @@ export function TimeLogList({
   );
 }
 
+/** 5 档打分条，水平 5 个小圆点。 */
+function EfficiencyPicker({
+  value,
+  onChange,
+}: {
+  value?: number;
+  onChange: (v: number | undefined) => void;
+}) {
+  return (
+    <div className="flex shrink-0 items-center gap-0.5" title="效率评分">
+      <span className="mr-1 text-[10px] text-[color:var(--fg-soft)]">
+        {value ? SCORE_LABEL[value - 1] : "评分"}
+      </span>
+      {[1, 2, 3, 4, 5].map((n) => {
+        const on = value != null && n <= value;
+        return (
+          <button
+            key={n}
+            type="button"
+            aria-label={`${SCORE_LABEL[n - 1]} · ${n} 分`}
+            onClick={() => onChange(value === n ? undefined : n)}
+            className={clsx(
+              "h-4 w-2 rounded-sm transition-colors",
+              on
+                ? "bg-[color:var(--accent)]"
+                : "bg-[color:var(--border)] hover:bg-[color:var(--accent-soft)]",
+            )}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
 function QuickAdd({
   activeSlot,
   inputRef,
@@ -117,31 +147,47 @@ function QuickAdd({
   inputRef: React.RefObject<HTMLInputElement | null>;
   onSubmit: (slot: number, text: string) => void;
 }) {
+  // 用本地 state 维护选中时段和文本，blur 时也保存
+  const [slot, setSlot] = useState<number>(activeSlot ?? new Date().getHours() * 2);
+  const [text, setText] = useState("");
+  const composingRef = useRef(false);
+
+  // 外部点击时间格时，同步下拉
+  useEffect(() => {
+    if (activeSlot != null) setSlot(activeSlot);
+  }, [activeSlot]);
+
+  function submit() {
+    const v = text.trim();
+    if (!v) return;
+    onSubmit(slot, v);
+    setText("");
+  }
+
   return (
     <div className="flex items-center gap-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--bg-card)] px-2 py-1.5">
-      <SlotSelect
-        value={activeSlot ?? 0}
-        onChange={(v) => {
-          // 只是调整当前选中的时段；实际提交在 input 里按回车
-          const input = inputRef.current;
-          if (input) {
-            input.dataset.slot = String(v);
-          }
-        }}
-      />
+      <SlotSelect value={slot} onChange={setSlot} />
       <input
         ref={inputRef}
         type="text"
-        data-slot={String(activeSlot ?? 0)}
-        placeholder="做了什么？按回车保存"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onCompositionStart={() => {
+          composingRef.current = true;
+        }}
+        onCompositionEnd={() => {
+          composingRef.current = false;
+        }}
+        placeholder="做了什么？回车或点别处保存"
         onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+          if (e.key === "Enter" && !composingRef.current) {
             e.preventDefault();
-            const el = e.currentTarget;
-            const slot = Number(el.dataset.slot ?? "0");
-            onSubmit(slot, el.value);
-            el.value = "";
+            submit();
           }
+        }}
+        onBlur={() => {
+          // 点别的地方时自动保存
+          submit();
         }}
         className="flex-1 bg-transparent text-sm outline-none placeholder:text-[color:var(--fg-soft)]"
       />

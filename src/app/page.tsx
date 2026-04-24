@@ -6,8 +6,6 @@ import {
   cryptoId,
   formatDate,
   type DailyEntry,
-  type Task,
-  type TimeCategory,
   type TimeLog,
   type TimeSlot,
 } from "@/lib/db";
@@ -18,16 +16,16 @@ import {
   CategoryPicker,
   TimeGrid,
   TimeSummary,
+  type PaintMode,
 } from "@/components/TimeGrid";
 import { BudgetInput } from "@/components/BudgetInput";
-import { TaskList } from "@/components/TaskList";
+import { TaskBoard } from "@/components/TaskBoard";
 import { TimeLogList } from "@/components/TimeLogList";
 import { IMETextarea } from "@/components/IMEInput";
 
 export default function TodayPage() {
   const [date, setDate] = useState(() => formatDate(new Date()));
-  const [selectedCategory, setSelectedCategory] =
-    useState<TimeCategory | null>("personal");
+  const [paintMode, setPaintMode] = useState<PaintMode | null>("personal");
   const [activeSlot, setActiveSlot] = useState<number | null>(null);
   const [showAboutHint, setShowAboutHint] = useState(false);
 
@@ -43,11 +41,6 @@ export default function TodayPage() {
     saveDaily(next);
   };
 
-  const big = entry.tasks.filter((t) => t.size === "big");
-  const medium = entry.tasks.filter((t) => t.size === "medium");
-  const small = entry.tasks.filter((t) => t.size === "small");
-  const extra = entry.tasks.filter((t) => t.size === "extra");
-
   const doneCount = entry.tasks.filter((t) => t.done && t.title.trim()).length;
   const totalCount = entry.tasks.filter((t) => t.title.trim()).length;
 
@@ -55,13 +48,6 @@ export default function TodayPage() {
     if (totalCount === 0) return 0;
     return Math.round((doneCount / totalCount) * 100);
   }, [doneCount, totalCount]);
-
-  function updateTasksOf(size: Task["size"], next: Task[]) {
-    update({
-      ...entry,
-      tasks: [...entry.tasks.filter((t) => t.size !== size), ...next],
-    });
-  }
 
   function updateSlots(next: TimeSlot[]) {
     update({ ...entry, slots: next });
@@ -112,83 +98,28 @@ export default function TodayPage() {
         )}
       </div>
 
-      {/* 最重要的任务 */}
-      <section className="space-y-3">
-        <SectionLabel>
-          <span className="mr-1">✦</span>最重要的任务
-        </SectionLabel>
-        <div className="card">
-          <TaskList
-            tasks={big}
-            onChange={(next) => updateTasksOf("big", next)}
-          />
-        </div>
-      </section>
+      {/* 135 任务看板（可拖动、跨级） */}
+      <TaskBoard
+        tasks={entry.tasks}
+        onChange={(next) => update({ ...entry, tasks: next })}
+        onAddExtra={addExtra}
+      />
 
-      {/* 三个中等任务 */}
+      {/* 随手记录 */}
       <section className="space-y-3">
-        <SectionLabel>
-          <span className="mr-1">✓</span>三个中等任务
-        </SectionLabel>
+        <SectionLabel>随手记录</SectionLabel>
         <div className="card">
-          <TaskList
-            tasks={medium}
-            onChange={(next) => updateTasksOf("medium", next)}
-          />
-        </div>
-      </section>
-
-      {/* 五个小型任务 */}
-      <section className="space-y-3">
-        <SectionLabel>
-          <span className="mr-1">◆</span>五个小型任务
-        </SectionLabel>
-        <div className="card">
-          <TaskList
-            tasks={small}
-            onChange={(next) => updateTasksOf("small", next)}
-          />
-        </div>
-      </section>
-
-      {/* 其他/临时任务 */}
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <SectionLabel>
-            <span className="mr-1">⋯</span>其他 / 临时任务
-          </SectionLabel>
-          <button
-            type="button"
-            onClick={addExtra}
-            className="text-xs text-[color:var(--accent)] hover:underline"
-          >
-            + 添加
-          </button>
-        </div>
-        <div className="card space-y-2">
-          {extra.length === 0 ? (
-            <div className="text-xs text-[color:var(--fg-soft)]">
-              临时插入的、不需立即完成的、仅记录的事项
-            </div>
-          ) : (
-            <TaskList
-              tasks={extra}
-              onChange={(next) => updateTasksOf("extra", next)}
-              columns={{ planned: false, estimate: false }}
-            />
-          )}
-          <div className="divider" />
           <IMETextarea
             value={entry.notes ?? ""}
             onChange={(v) => update({ ...entry, notes: v })}
-            placeholder="随手记录：贴发票、改下 PPT、扫描合同……"
+            placeholder="贴发票、改 PPT、扫描合同……"
             rows={3}
             className="w-full resize-y bg-transparent text-sm leading-6 outline-none placeholder:text-[color:var(--fg-soft)]"
           />
         </div>
       </section>
 
-      {/* 时间预算 */}
+      {/* 可支配时间预估 */}
       <section className="space-y-3">
         <SectionLabel>可支配时间预估</SectionLabel>
         <div className="card">
@@ -201,17 +132,14 @@ export default function TodayPage() {
         <div className="flex items-center justify-between">
           <SectionLabel>24 小时 · 时间分配</SectionLabel>
           <span className="hidden text-[11px] text-[color:var(--fg-soft)] sm:inline">
-            每格 30 分钟 · 6 段式排布
+            每格 30 分钟 · 按住可拖动批量填涂
           </span>
         </div>
         <div className="card space-y-3">
-          <CategoryPicker
-            value={selectedCategory}
-            onChange={setSelectedCategory}
-          />
+          <CategoryPicker value={paintMode} onChange={setPaintMode} />
           <TimeGrid
             slots={entry.slots}
-            selectedCategory={selectedCategory}
+            paintMode={paintMode}
             activeSlot={activeSlot}
             onChange={updateSlots}
             onPickSlot={setActiveSlot}
@@ -221,7 +149,7 @@ export default function TodayPage() {
         </div>
       </section>
 
-      {/* 时间日志：每半小时做了什么 */}
+      {/* 时间日志 */}
       <section className="space-y-3">
         <SectionLabel>今日时间日志</SectionLabel>
         <div className="card">

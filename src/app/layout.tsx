@@ -22,8 +22,8 @@ export default function RootLayout({
   return (
     <html lang="zh-CN" className="h-full">
       <body className="min-h-full">
-        <div className="mx-auto flex min-h-screen max-w-2xl flex-col pb-24">
-          <main className="flex-1 px-5 pt-8 sm:px-6">{children}</main>
+        <div className="mx-auto flex min-h-screen w-full max-w-[960px] flex-col pb-24">
+          <main className="flex-1 px-5 pt-8 sm:px-8 lg:px-12">{children}</main>
         </div>
         <TabBar />
       </body>

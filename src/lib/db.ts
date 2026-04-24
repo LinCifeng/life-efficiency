@@ -36,6 +36,7 @@ export interface TimeLog {
   id: string;
   slotIndex: number; // 0~47，对应半小时格
   text: string;
+  efficiency?: number; // 1~5，低效-高效
 }
 
 export interface DailyEntry {

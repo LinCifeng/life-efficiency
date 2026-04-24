@@ -6,17 +6,9 @@ import {
   type TimeSlot,
 } from "@/lib/db";
 import clsx from "clsx";
+import { useCallback, useEffect, useRef } from "react";
 
-// 半小时格 -> 轮换下一个状态
-const CYCLE: TimeSlot[] = ["personal", "work", "family", "unavailable", null];
-
-function nextSlot(current: TimeSlot, selected: TimeCategory | null): TimeSlot {
-  if (selected) {
-    return current === selected ? null : selected;
-  }
-  const i = CYCLE.indexOf(current);
-  return CYCLE[(i + 1) % CYCLE.length];
-}
+export type PaintMode = TimeCategory | "erase";
 
 const BANDS: Array<{ start: number; label: string }> = [
   { start: 0, label: "凌晨" },
@@ -43,32 +35,97 @@ export function slotRangeLabel(i: number): string {
 
 export function TimeGrid({
   slots,
-  selectedCategory,
+  paintMode,
   activeSlot,
   onChange,
   onPickSlot,
 }: {
   slots: TimeSlot[];
-  selectedCategory: TimeCategory | null;
+  paintMode: PaintMode | null;
   activeSlot: number | null;
   onChange: (slots: TimeSlot[]) => void;
   onPickSlot: (i: number) => void;
 }) {
-  function setSlot(i: number) {
-    const next = [...slots];
-    next[i] = nextSlot(slots[i], selectedCategory);
-    onChange(next);
+  // 拖动涂改相关 refs
+  const draggingRef = useRef(false);
+  const paintedRef = useRef<Set<number>>(new Set());
+  const slotsRef = useRef(slots);
+  slotsRef.current = slots;
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const applyTo = useCallback(
+    (i: number) => {
+      if (paintedRef.current.has(i)) return;
+      paintedRef.current.add(i);
+      const target: TimeSlot =
+        paintMode === "erase" ? null : (paintMode as TimeCategory);
+      const next = [...slotsRef.current];
+      if (next[i] === target) return;
+      next[i] = target;
+      slotsRef.current = next;
+      onChange(next);
+    },
+    [paintMode, onChange],
+  );
+
+  function slotIndexAtPoint(x: number, y: number): number | null {
+    const el = document.elementFromPoint(x, y) as HTMLElement | null;
+    const btn = el?.closest<HTMLElement>("[data-slot]");
+    if (!btn) return null;
+    const v = btn.getAttribute("data-slot");
+    if (v == null) return null;
+    const idx = Number(v);
+    return Number.isFinite(idx) ? idx : null;
+  }
+
+  function startDrag(i: number) {
+    draggingRef.current = true;
+    paintedRef.current = new Set();
+    if (paintMode) applyTo(i);
+  }
+
+  function endDrag() {
+    draggingRef.current = false;
+    paintedRef.current.clear();
+  }
+
+  // 全局 pointerup / pointercancel 兜底结束拖拽
+  useEffect(() => {
+    const onUp = () => endDrag();
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    return () => {
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+  }, []);
+
+  function handlePointerDown(e: React.PointerEvent, i: number) {
+    // 只处理主键/单指
+    if (e.pointerType === "mouse" && e.button !== 0) return;
     onPickSlot(i);
+    if (!paintMode) return; // 没选类别：只 focus 日志，不改格子
+    e.preventDefault();
+    startDrag(i);
+  }
+
+  function handleContainerPointerMove(e: React.PointerEvent) {
+    if (!draggingRef.current || !paintMode) return;
+    const idx = slotIndexAtPoint(e.clientX, e.clientY);
+    if (idx != null) applyTo(idx);
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div
+      ref={containerRef}
+      onPointerMove={handleContainerPointerMove}
+      style={{ touchAction: "none" }}
+      className="flex select-none flex-col gap-3"
+    >
       {BANDS.map((band) => {
-        // 每个时段 4 小时 = 8 格
         const indices = Array.from({ length: 8 }, (_, k) => band.start * 2 + k);
         return (
           <div key={band.start} className="flex items-stretch gap-3">
-            {/* 左侧时段标签 */}
             <div className="flex w-12 shrink-0 flex-col justify-center">
               <div className="text-[13px] font-medium text-[color:var(--fg)]">
                 {band.label}
@@ -79,7 +136,6 @@ export function TimeGrid({
               </div>
             </div>
 
-            {/* 格子 + 刻度 */}
             <div className="flex-1">
               <div className="grid grid-cols-8 gap-1">
                 {indices.map((i) => {
@@ -90,7 +146,8 @@ export function TimeGrid({
                     <button
                       key={i}
                       type="button"
-                      onClick={() => setSlot(i)}
+                      data-slot={i}
+                      onPointerDown={(e) => handlePointerDown(e, i)}
                       aria-label={slotRangeLabel(i)}
                       title={slotRangeLabel(i)}
                       className={clsx(
@@ -114,7 +171,6 @@ export function TimeGrid({
                   );
                 })}
               </div>
-              {/* 整点刻度：2 格对应一个整点 */}
               <div className="mt-1 grid grid-cols-8 text-[10px] tabular-nums text-[color:var(--fg-soft)]">
                 {indices.map((i, k) => (
                   <div key={i} className="text-center">
@@ -134,8 +190,8 @@ export function CategoryPicker({
   value,
   onChange,
 }: {
-  value: TimeCategory | null;
-  onChange: (value: TimeCategory | null) => void;
+  value: PaintMode | null;
+  onChange: (value: PaintMode | null) => void;
 }) {
   const cats: TimeCategory[] = ["personal", "work", "family", "unavailable"];
   return (
@@ -163,8 +219,25 @@ export function CategoryPicker({
           </button>
         );
       })}
+      <button
+        type="button"
+        onClick={() => onChange(value === "erase" ? null : "erase")}
+        className={clsx(
+          "flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors",
+          value === "erase"
+            ? "border-[color:var(--fg)] bg-[color:var(--border-soft)] text-[color:var(--fg)]"
+            : "border-[color:var(--border)] text-[color:var(--fg-muted)] hover:border-[color:var(--fg-muted)]",
+        )}
+        title="选中后点击或拖过格子可清除"
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M16 3l5 5-11 11H5v-5z" />
+          <path d="M13.5 5.5l5 5" />
+        </svg>
+        <span>擦除</span>
+      </button>
       <span className="ml-1 text-[11px] text-[color:var(--fg-soft)]">
-        选中后点格子批量填；未选时点格子循环切换
+        选类别后单击或按住拖过格子 · 未选时只定位日志
       </span>
     </div>
   );

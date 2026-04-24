@@ -18,7 +18,7 @@ export function TabBar() {
       className="fixed bottom-0 left-0 right-0 z-40 border-t border-[color:var(--border)] bg-[color:var(--bg)]/85 backdrop-blur-md"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
-      <div className="mx-auto flex max-w-2xl items-stretch justify-around px-2 py-2">
+      <div className="mx-auto flex w-full max-w-[960px] items-stretch justify-around px-2 py-2">
         {TABS.map((tab) => {
           const active =
             tab.href === "/"
