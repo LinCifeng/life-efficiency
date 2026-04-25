@@ -58,8 +58,18 @@ export function TimeLogList({
   }
 
   // activeSlot 变化时：若该 slot 没有日志，创建空 log 并标记 focus；若已有，直接聚焦。
+  // activeSlot 变 null 时（用户切到擦除 / 取消类别），主动把当前聚焦的日志 input
+  // blur 掉，避免还有光标停在某条日志上。
   useEffect(() => {
-    if (activeSlot == null) return;
+    if (activeSlot == null) {
+      for (const el of inputRefs.current.values()) {
+        if (el === document.activeElement) {
+          el.blur();
+          break;
+        }
+      }
+      return;
+    }
     const cur = logsRef.current;
     const existing = cur.find((l) => l.slotIndex === activeSlot);
     if (existing) {

@@ -3,20 +3,25 @@
 import type { DailyEntry } from "@/lib/db";
 import { IMETextarea } from "@/components/IMEInput";
 
+type Review = NonNullable<DailyEntry["review"]>;
+
 /**
  * 每日复盘：放在 Today 页底部，3 个小问题给一天一个收尾。
  * 字段对应 DailyEntry.review。打字即存，无需手动保存。
+ *
+ * 接口设计上只接收 / 回写 review 这一块字段，避免拿着旧的整体 entry 做覆盖
+ * （会和同时在改 slots / tasks 的写入互相吞数据）。
  */
 export function DailyReview({
   value,
   onChange,
 }: {
-  value: DailyEntry;
-  onChange: (next: DailyEntry) => void;
+  value: Review;
+  onChange: (next: Review) => void;
 }) {
-  const review = value.review ?? {};
-  function patch(partial: Partial<NonNullable<DailyEntry["review"]>>) {
-    onChange({ ...value, review: { ...review, ...partial } });
+  const review = value;
+  function patch(partial: Partial<Review>) {
+    onChange({ ...review, ...partial });
   }
 
   return (

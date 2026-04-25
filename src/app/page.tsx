@@ -32,9 +32,28 @@ export default function TodayPage() {
   const [activeSlot, setActiveSlot] = useState<number | null>(null);
 
   const entry = useDaily(date);
-  const update = (next: DailyEntry) => {
+  // entryRef 始终指向"我们刚写过的最新 entry"，避免在同一次事件里多次同步调用
+  // update 时，每次都从渲染闭包里拿到旧 entry → 互相覆盖（典型表现：选了类别后
+  // 点格子，第一个格子涂色和创建空日志同步发生，后写完的把先写完的字段覆盖掉，
+  // 表现为格子没涂色 / 日志没出现）。
+  const entryRef = useRef(entry);
+  entryRef.current = entry;
+
+  const applyUpdate = (mutator: (prev: DailyEntry) => DailyEntry) => {
+    const next = mutator(entryRef.current);
+    entryRef.current = next;
     saveDaily(next);
   };
+
+  // 切换涂色类别 / 进入擦除 / 取消选择时，关掉当前的"日志聚焦"目标。
+  // - 进入擦除：用户的本意是清色，不希望日志区还高亮某条。
+  // - 取消类别：等同"我现在不想编辑日志了"。
+  // 真正的 input.blur() 在 TimeLogList 里监听 activeSlot=null 完成。
+  useEffect(() => {
+    if (paintMode === "erase" || paintMode == null) {
+      setActiveSlot(null);
+    }
+  }, [paintMode]);
 
   /**
    * 顺移昨日未完成任务到今日。
@@ -119,21 +138,21 @@ export default function TodayPage() {
   }, [doneCount, totalCount]);
 
   function updateSlots(next: TimeSlot[]) {
-    update({ ...entry, slots: next });
+    applyUpdate((prev) => ({ ...prev, slots: next }));
   }
 
   function updateTimeLogs(next: TimeLog[]) {
-    update({ ...entry, timeLogs: next });
+    applyUpdate((prev) => ({ ...prev, timeLogs: next }));
   }
 
   function addExtra() {
-    update({
-      ...entry,
+    applyUpdate((prev) => ({
+      ...prev,
       tasks: [
-        ...entry.tasks,
+        ...prev.tasks,
         { id: cryptoId(), size: "extra", title: "", done: false },
       ],
-    });
+    }));
   }
 
   return (
@@ -178,7 +197,7 @@ export default function TodayPage() {
       {/* 135 任务看板（可拖动、跨级） */}
       <TaskBoard
         tasks={entry.tasks}
-        onChange={(next) => update({ ...entry, tasks: next })}
+        onChange={(next) => applyUpdate((prev) => ({ ...prev, tasks: next }))}
         onAddExtra={addExtra}
       />
 
@@ -221,7 +240,12 @@ export default function TodayPage() {
       <section className="space-y-3">
         <SectionLabel>每日复盘</SectionLabel>
         <div className="card">
-          <DailyReview value={entry} onChange={update} />
+          <DailyReview
+            value={entry.review ?? {}}
+            onChange={(reviewNext) =>
+              applyUpdate((prev) => ({ ...prev, review: reviewNext }))
+            }
+          />
         </div>
       </section>
 
