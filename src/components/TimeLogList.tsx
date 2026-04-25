@@ -66,7 +66,7 @@ export function TimeLogList({
       pendingFocusRef.current = existing.id;
       const el = inputRefs.current.get(existing.id);
       if (el) {
-        el.focus();
+        el.focus({ preventScroll: true });
         const len = el.value.length;
         el.setSelectionRange(len, len);
         pendingFocusRef.current = null;
@@ -88,7 +88,7 @@ export function TimeLogList({
     if (!id) return;
     const el = inputRefs.current.get(id);
     if (el) {
-      el.focus();
+      el.focus({ preventScroll: true });
       const len = el.value.length;
       el.setSelectionRange(len, len);
       pendingFocusRef.current = null;

@@ -103,8 +103,12 @@ export function TimeGrid({
   function handlePointerDown(e: React.PointerEvent, i: number) {
     // 只处理主键/单指
     if (e.pointerType === "mouse" && e.button !== 0) return;
-    onPickSlot(i);
-    if (!paintMode) return; // 没选类别：只 focus 日志，不改格子
+    if (!paintMode) {
+      // 未选类别时，点击仅用于定位日志（页面会去对应行）
+      onPickSlot(i);
+      return;
+    }
+    // 选了类别 / 擦除时，只涂色，不影响日志，避免页面意外滚动
     e.preventDefault();
     startDrag(i);
   }
@@ -156,22 +160,24 @@ export function TimeGrid({
                             aria-label={slotRangeLabel(i)}
                             title={slotRangeLabel(i)}
                             className={clsx(
-                              "flex aspect-square flex-1 items-center justify-center rounded-[6px] border text-sm transition-all",
+                              "flex aspect-square flex-1 items-center justify-center rounded-[6px] border transition-all",
                               isActive && "ring-2 ring-[color:var(--accent)]",
-                              !s && "bg-transparent hover:bg-[color:var(--border-soft)]",
-                              !s && "border-[color:var(--border)]",
+                              // 空格子：仅边框 hover，避免和「个人」涂色背景冲突
+                              !s &&
+                                "bg-transparent border-[color:var(--border)] hover:border-[color:var(--fg-muted)]",
                             )}
                             style={
                               s
                                 ? {
                                     backgroundColor: meta!.color + "33",
                                     borderColor: meta!.color + "80",
-                                    color: "var(--fg)",
                                   }
                                 : undefined
                             }
                           >
-                            {meta?.symbol ?? ""}
+                            {s ? (
+                              <CategoryIcon category={s} size={14} />
+                            ) : null}
                           </button>
                         );
                       })}
@@ -221,9 +227,7 @@ export function CategoryPicker({
             )}
             style={active ? { backgroundColor: meta.color + "33" } : undefined}
           >
-            <span style={{ color: meta.color, fontWeight: 600 }}>
-              {meta.symbol}
-            </span>
+            <CategoryIcon category={c} size={14} />
             <span>{meta.label}</span>
           </button>
         );
@@ -234,19 +238,16 @@ export function CategoryPicker({
         className={clsx(
           "flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors",
           value === "erase"
-            ? "border-[color:var(--fg)] bg-[color:var(--border-soft)] text-[color:var(--fg)]"
+            ? "border-[color:var(--fg)] bg-[color:var(--fg)] text-[color:var(--bg)]"
             : "border-[color:var(--border)] text-[color:var(--fg-muted)] hover:border-[color:var(--fg-muted)]",
         )}
-        title="选中后点击或拖过格子可清除"
+        title="选中后点击或拖过格子可清除（再次点击关闭擦除态）"
       >
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-          <path d="M16 3l5 5-11 11H5v-5z" />
-          <path d="M13.5 5.5l5 5" />
-        </svg>
+        <EraserIcon size={12} />
         <span>擦除</span>
       </button>
       <span className="ml-1 text-[11px] text-[color:var(--fg-soft)]">
-        选类别后单击或按住拖过格子 · 未选时只定位日志
+        选类别后单击或拖过格子 · 未选时只定位日志
       </span>
     </div>
   );
@@ -271,7 +272,7 @@ export function TimeSummary({ slots }: { slots: TimeSlot[] }) {
         const meta = TIME_CATEGORY_META[c];
         return (
           <div key={c} className="flex items-center gap-1.5">
-            <span style={{ color: meta.color }}>{meta.symbol}</span>
+            <CategoryIcon category={c} size={13} />
             <span className="text-[color:var(--fg-muted)]">{meta.label}</span>
             <span className="tabular-nums text-[color:var(--fg)]">{hours}h</span>
             <span className="tabular-nums text-[color:var(--fg-soft)]">
@@ -281,5 +282,84 @@ export function TimeSummary({ slots }: { slots: TimeSlot[] }) {
         );
       })}
     </div>
+  );
+}
+
+/**
+ * 各分类的小图标（lucide 风格 stroke svg）。
+ *
+ * - personal 个人：人像
+ * - work 工作：公文包
+ * - family 家人朋友：心形
+ * - unavailable 不可支配：月亮（休息 / 睡眠 / 不投入）
+ */
+export function CategoryIcon({
+  category,
+  size = 14,
+  className,
+}: {
+  category: TimeCategory;
+  size?: number;
+  className?: string;
+}) {
+  const stroke = TIME_CATEGORY_META[category].color;
+  const common: React.SVGProps<SVGSVGElement> = {
+    width: size,
+    height: size,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke,
+    strokeWidth: 1.8,
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    className,
+  };
+  switch (category) {
+    case "personal":
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="8" r="4" />
+          <path d="M4 21c0-4 4-7 8-7s8 3 8 7" />
+        </svg>
+      );
+    case "work":
+      return (
+        <svg {...common}>
+          <rect x="3" y="7" width="18" height="13" rx="2" />
+          <path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
+          <path d="M3 13h18" />
+        </svg>
+      );
+    case "family":
+      return (
+        <svg {...common}>
+          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 1 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z" />
+        </svg>
+      );
+    case "unavailable":
+      return (
+        <svg {...common}>
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+        </svg>
+      );
+  }
+}
+
+function EraserIcon({ size = 12 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M21 21H8" />
+      <path d="M5.5 17.5l-2.5-2.5a2 2 0 0 1 0-2.83l9.17-9.17a2 2 0 0 1 2.83 0l4.83 4.83a2 2 0 0 1 0 2.83l-7.83 7.83a2 2 0 0 1-2.83 0l-3.67-3.67z" />
+      <path d="M14 7l3 3" />
+    </svg>
   );
 }
