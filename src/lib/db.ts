@@ -57,6 +57,11 @@ export interface DailyEntry {
     improve?: string;
     tomorrow?: string;
   };
+  /**
+   * 已从该日期 carry over 过未完成任务，用于避免重复顺移。
+   * 仅在打开真"今天"时生效；只要本字段等于"昨天"，就跳过顺移。
+   */
+  carriedFromDate?: string;
 }
 
 export interface EnergyEntry {

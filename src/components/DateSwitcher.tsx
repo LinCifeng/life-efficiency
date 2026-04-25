@@ -18,18 +18,21 @@ export function DateSwitcher({
   const weekday = WEEK[d.getDay()];
 
   return (
-    <div className="flex items-center justify-between">
+    <div className="flex items-end justify-between gap-4">
       <div className="flex items-baseline gap-3">
-        <div className="text-3xl font-medium tracking-tight text-[color:var(--fg)]">
+        <div className="text-5xl font-medium tracking-tight text-[color:var(--fg)] sm:text-6xl">
           {d.getMonth() + 1}
           <span className="text-[color:var(--fg-soft)]">/</span>
           {d.getDate()}
         </div>
-        <div className="text-sm text-[color:var(--fg-muted)]">
-          周{weekday} · {d.getFullYear()}
+        <div className="flex flex-col leading-tight text-[color:var(--fg-muted)]">
+          <span className="text-base font-medium text-[color:var(--fg)]">
+            周{weekday}
+          </span>
+          <span className="text-xs tracking-wider">{d.getFullYear()}</span>
         </div>
       </div>
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1 pb-1">
         <IconButton onClick={() => onChange(addDays(date, -1))} aria-label="前一天">
           <Chevron dir="left" />
         </IconButton>
@@ -37,7 +40,7 @@ export function DateSwitcher({
           type="button"
           onClick={() => onChange(today)}
           className={clsx(
-            "rounded-full px-3 py-1.5 text-xs tracking-wide transition-colors",
+            "rounded-full px-3.5 py-1.5 text-sm tracking-wide transition-colors",
             isToday
               ? "bg-[color:var(--bg-tag-strong)] text-[color:var(--fg)]"
               : "text-[color:var(--fg-muted)] hover:bg-[color:var(--border-soft)]",
@@ -61,7 +64,7 @@ function IconButton({
     <button
       type="button"
       {...rest}
-      className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--fg-muted)] transition-colors hover:bg-[color:var(--border-soft)]"
+      className="flex h-9 w-9 items-center justify-center rounded-full text-[color:var(--fg-muted)] transition-colors hover:bg-[color:var(--border-soft)]"
     >
       {children}
     </button>
@@ -71,8 +74,8 @@ function IconButton({
 function Chevron({ dir }: { dir: "left" | "right" }) {
   return (
     <svg
-      width="16"
-      height="16"
+      width="18"
+      height="18"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"

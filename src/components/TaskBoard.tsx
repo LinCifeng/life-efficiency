@@ -1,13 +1,15 @@
 "use client";
 
 /**
- * 135 任务拖拽看板：四个分区（big / medium / small / extra）之间可以自由
- * 拖动，拖进哪个分区就变成对应的 size，位置也按落点插入。
+ * 135 任务拖拽看板：四个分区（big / medium / small / extra）。
  *
- * 思路：每个分区本身是一个 droppable「容器」，里面放一个 SortableContext。
- * 拖动时：
- *   - 同组内：数组 reorder
- *   - 跨组：把拖动 item 从原数组移出，更新 size，插入目标数组的对应位置
+ * 设计原则：1 / 3 / 5 这三个固定槽位的数量绝不能因为拖动而改变。
+ * 因此跨 size 的拖动一律按「swap 交换」处理——
+ *   - active 接管 over 的 size 与位置；
+ *   - over 反向接管 active 原本的 size 与位置。
+ * 这样数量始终保持：big = 1, medium = 3, small = 5；extra 自由增减。
+ *
+ * 同 size 内拖动则是普通 reorder。
  */
 
 import {
@@ -20,7 +22,6 @@ import {
   useSensor,
   useSensors,
   type DragEndEvent,
-  type DragOverEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { SortableContext, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
@@ -96,74 +97,81 @@ export function TaskBoard({
     setActiveId(String(e.active.id));
   }
 
-  function handleDragOver(e: DragOverEvent) {
-    // 仅在跨容器时，先把 task.size 同步过去（视觉更顺滑）
-    const { active, over } = e;
-    if (!over) return;
-    const from = findContainer(String(active.id));
-    const to = findContainer(String(over.id));
-    if (!from || !to || from === to) return;
-
-    onChange(
-      tasks.map((t) => (t.id === active.id ? { ...t, size: to } : t)),
-    );
-  }
-
   function handleDragEnd(e: DragEndEvent) {
     const { active, over } = e;
     setActiveId(null);
     if (!over || active.id === over.id) return;
 
-    const activeSize = findContainer(String(active.id));
-    const overSize = findContainer(String(over.id));
-    if (!activeSize || !overSize) return;
+    const activeId = String(active.id);
+    const overId = String(over.id);
 
-    // 计算目标数组中的落点
-    const overIsContainer = SIZES.includes(String(over.id) as Size);
-    // drag-over 已经把 size 改了，基于最新 tasks 重新分桶
-    const latest: Record<Size, Task[]> = {
-      big: [],
-      medium: [],
-      small: [],
-      extra: [],
-    };
-    for (const t of tasks) latest[t.size].push(t);
+    const activeSize = findContainer(activeId);
+    if (!activeSize) return;
 
-    const fromArr = latest[activeSize];
-    const toArr = latest[overSize];
-    const fromIdx = fromArr.findIndex((t) => t.id === active.id);
-    if (fromIdx < 0) return;
+    const overIsContainer = SIZES.includes(overId as Size);
+    const overSize = overIsContainer
+      ? (overId as Size)
+      : findContainer(overId);
+    if (!overSize) return;
 
-    // 同容器：reorder
     if (activeSize === overSize) {
+      // 同容器：reorder
+      const arr = grouped[activeSize];
+      const fromIdx = arr.findIndex((t) => t.id === activeId);
       const toIdx = overIsContainer
-        ? toArr.length - 1
-        : toArr.findIndex((t) => t.id === over.id);
-      if (toIdx < 0 || toIdx === fromIdx) return;
-      const next = [...fromArr];
+        ? arr.length - 1
+        : arr.findIndex((t) => t.id === overId);
+      if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return;
+      const next = [...arr];
       const [moved] = next.splice(fromIdx, 1);
       next.splice(toIdx, 0, moved);
-      latest[activeSize] = next;
-    } else {
-      // 跨容器：已经把 size 换了，但位置还在末尾，需要移动到 over 位置
-      const moved = fromArr[fromIdx];
-      const newFrom = [...fromArr];
-      newFrom.splice(fromIdx, 1);
-      latest[activeSize] = newFrom;
-
-      const newTo = [...toArr];
-      // 去重：drag-over 可能已经把 moved 加入 toArr 末尾
-      const existingIdx = newTo.findIndex((t) => t.id === moved.id);
-      if (existingIdx >= 0) newTo.splice(existingIdx, 1);
-      const toIdx = overIsContainer
-        ? newTo.length
-        : newTo.findIndex((t) => t.id === over.id);
-      newTo.splice(toIdx < 0 ? newTo.length : toIdx, 0, moved);
-      latest[overSize] = newTo;
+      rebuild({ [activeSize]: next });
+      return;
     }
 
-    // 按 big → medium → small → extra 顺序拼回总数组
-    onChange([...latest.big, ...latest.medium, ...latest.small, ...latest.extra]);
+    /**
+     * 跨容器：严格 swap，保证 1/3/5 槽位数量不变。
+     *
+     * 落点确定：
+     *  - 落到具体任务（overId 是任务 id）：与该任务交换。
+     *  - 落到容器空白（overId 是 size 名）：和目标容器最后一条任务交换；
+     *    如果目标容器为空（只可能是 extra），则禁止该次拖动（直接 return）。
+     */
+    const fromArr = grouped[activeSize];
+    const toArr = grouped[overSize];
+    const fromIdx = fromArr.findIndex((t) => t.id === activeId);
+    if (fromIdx < 0) return;
+
+    const toIdx = overIsContainer
+      ? toArr.length - 1
+      : toArr.findIndex((t) => t.id === overId);
+    if (toIdx < 0) return; // 空容器，禁止跨入
+
+    const a = fromArr[fromIdx];
+    const b = toArr[toIdx];
+
+    const newFromArr = [...fromArr];
+    const newToArr = [...toArr];
+    // a 接管 over 位置 + over 的 size
+    newToArr[toIdx] = { ...a, size: overSize };
+    // b 接管 active 原位置 + active 的 size
+    newFromArr[fromIdx] = { ...b, size: activeSize };
+
+    rebuild({ [activeSize]: newFromArr, [overSize]: newToArr });
+  }
+
+  /**
+   * 用 partial 替换 grouped 中的部分桶，并按 big → medium → small → extra
+   * 重新拼回总数组。
+   */
+  function rebuild(partial: Partial<Record<Size, Task[]>>) {
+    const next: Record<Size, Task[]> = {
+      big: partial.big ?? grouped.big,
+      medium: partial.medium ?? grouped.medium,
+      small: partial.small ?? grouped.small,
+      extra: partial.extra ?? grouped.extra,
+    };
+    onChange([...next.big, ...next.medium, ...next.small, ...next.extra]);
   }
 
   const activeTask = activeId
@@ -221,7 +229,6 @@ export function TaskBoard({
       sensors={sensors}
       collisionDetection={closestCenter}
       onDragStart={handleDragStart}
-      onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
       onDragCancel={() => setActiveId(null)}
     >
