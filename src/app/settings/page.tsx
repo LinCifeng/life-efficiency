@@ -156,6 +156,58 @@ export default function SettingsPage() {
           </p>
         </div>
       </section>
+
+      <section className="space-y-3">
+        <SectionLabel>状态与说明</SectionLabel>
+        <div className="card space-y-3 text-[12px] leading-relaxed text-[color:var(--fg-muted)]">
+          <ul className="space-y-1.5">
+            <li>
+              <span className="text-[color:var(--fg)]">· 平台形式：</span>
+              目前仅支持网页（PC / 手机浏览器均可），未来可能会开发独立 APP。
+            </li>
+            <li>
+              <span className="text-[color:var(--fg)]">· 数据存储：</span>
+              全部数据只保留在你当前设备的浏览器里，不支持云端同步、不会上传服务器。
+              换设备 / 换浏览器前请用上面的「导出 JSON 备份」拷一份。
+            </li>
+            <li>
+              <span className="text-[color:var(--fg)]">· 当前阶段：</span>
+              产品仍在持续快速迭代，可能不稳定，
+              <span className="text-[color:var(--danger)]">暂不建议作为长期数据存档</span>。
+              建议把它当作"试用/打磨阶段"，养成定期导出备份的习惯。
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <SectionLabel>联系开发者</SectionLabel>
+        <div className="card space-y-2 text-[12px] leading-relaxed text-[color:var(--fg-muted)]">
+          <p>有任何反馈、Bug、建议、想要的功能，欢迎通过下面的方式联系：</p>
+          <a
+            href="mailto:1498367482@qq.com"
+            className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border)] px-3 py-1.5 text-[13px] text-[color:var(--fg)] transition-colors hover:border-[color:var(--accent-soft)] hover:bg-[color:var(--bg-card)]"
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={1.8}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <rect x="3" y="5" width="18" height="14" rx="2" />
+              <path d="M3 7l9 6 9-6" />
+            </svg>
+            <span className="tabular-nums">1498367482@qq.com</span>
+          </a>
+          <p className="text-[11px] text-[color:var(--fg-soft)]">
+            可同时作为 QQ 联系，邮件 / QQ 都会看。
+          </p>
+        </div>
+      </section>
     </div>
   );
 }

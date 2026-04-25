@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import {
   addDays,
@@ -13,7 +13,7 @@ import {
   type TimeLog,
   type TimeSlot,
 } from "@/lib/db";
-import { saveDaily, useDaily } from "@/lib/hooks";
+import { saveDaily } from "@/lib/hooks";
 import { DateSwitcher } from "@/components/DateSwitcher";
 import { SectionLabel } from "@/components/SectionLabel";
 import {
@@ -31,18 +31,83 @@ export default function TodayPage() {
   const [paintMode, setPaintMode] = useState<PaintMode | null>("personal");
   const [activeSlot, setActiveSlot] = useState<number | null>(null);
 
-  const entry = useDaily(date);
-  // entryRef 始终指向"我们刚写过的最新 entry"，避免在同一次事件里多次同步调用
-  // update 时，每次都从渲染闭包里拿到旧 entry → 互相覆盖（典型表现：选了类别后
-  // 点格子，第一个格子涂色和创建空日志同步发生，后写完的把先写完的字段覆盖掉，
-  // 表现为格子没涂色 / 日志没出现）。
-  const entryRef = useRef(entry);
-  entryRef.current = entry;
+  // Today 页放弃 useLiveQuery，改用本地 useState + functional setEntry。
+  // 原因：useLiveQuery 在 React 同一事件 batch 里的中间渲染会把 entryRef 又
+  // 同步回旧 entry，造成"点格子时同步触发的 setSlots 和 setTimeLogs 互相覆盖"，
+  // 现象就是第一次点击只创建了日志、格子没涂色（或者反过来）。
+  // 改成本地 state 后，applyUpdate 用 setEntry(prev => mutator(prev))，
+  // React 自身保证多个 functional update 串行作用在最新值上，互不吞数据。
+  const [entry, setEntry] = useState<DailyEntry>(() => createEmptyDaily(date));
+
+  /**
+   * date 变化时：从 IndexedDB 加载该日 entry，并承担"顺移昨日未完成任务"的责任。
+   *
+   *  - 仅当当前 date 是真"今天"时执行顺移；翻看历史日不会触发；
+   *  - 通过 entry.carriedFromDate 字段去重，每个昨日最多顺移一次；
+   *  - 优先填进今天对应 size 的"空槽位"（标题为空），保持 1 / 3 / 5 结构；
+   *  - 没有空槽位时进 extra 区域。
+   */
+  useEffect(() => {
+    let cancelled = false;
+    setEntry(createEmptyDaily(date));
+    (async () => {
+      const today = formatDate(new Date());
+      const t = (await db.daily.get(date)) ?? createEmptyDaily(date);
+      if (cancelled) return;
+
+      if (date !== today) {
+        setEntry(t);
+        return;
+      }
+
+      const yesterday = addDays(today, -1);
+      if (t.carriedFromDate === yesterday) {
+        setEntry(t);
+        return;
+      }
+
+      const yEntry = await db.daily.get(yesterday);
+      if (cancelled) return;
+
+      let next: DailyEntry = { ...t, carriedFromDate: yesterday };
+      if (yEntry) {
+        const unchecked = yEntry.tasks.filter(
+          (x) => !x.done && x.title.trim(),
+        );
+        if (unchecked.length > 0) {
+          const nextTasks = [...t.tasks];
+          for (const tk of unchecked) {
+            const slotIdx = nextTasks.findIndex(
+              (x) => x.size === tk.size && !x.title.trim() && !x.done,
+            );
+            const cloned: Task = {
+              id: cryptoId(),
+              size: tk.size,
+              title: tk.title,
+              done: false,
+            };
+            if (slotIdx >= 0) nextTasks[slotIdx] = cloned;
+            else nextTasks.push({ ...cloned, size: "extra" });
+          }
+          next = { ...next, tasks: nextTasks };
+        }
+      }
+
+      if (cancelled) return;
+      setEntry(next);
+      saveDaily(next);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [date]);
 
   const applyUpdate = (mutator: (prev: DailyEntry) => DailyEntry) => {
-    const next = mutator(entryRef.current);
-    entryRef.current = next;
-    saveDaily(next);
+    setEntry((prev) => {
+      const next = mutator(prev);
+      saveDaily(next);
+      return next;
+    });
   };
 
   // 切换涂色类别 / 进入擦除 / 取消选择时，关掉当前的"日志聚焦"目标。
@@ -54,80 +119,6 @@ export default function TodayPage() {
       setActiveSlot(null);
     }
   }, [paintMode]);
-
-  /**
-   * 顺移昨日未完成任务到今日。
-   *
-   * 规则：
-   *  - 仅当当前 date 是真"今天"时执行；翻看历史日不会触发顺移；
-   *  - 通过 today 的 entry.carriedFromDate 字段去重，每个昨日最多顺移一次；
-   *  - 优先填进今天对应 size 的"空槽位"（标题为空），保持 1 / 3 / 5 结构；
-   *  - 没有空槽位时，进 extra 区域，extra 数量可变。
-   */
-  const carryAttemptedRef = useRef<string | null>(null);
-  useEffect(() => {
-    const today = formatDate(new Date());
-    if (date !== today) return;
-    if (carryAttemptedRef.current === today) return;
-    carryAttemptedRef.current = today;
-
-    const yesterday = addDays(today, -1);
-    let cancelled = false;
-
-    (async () => {
-      const tEntry = await db.daily.get(today);
-      if (cancelled) return;
-      if (tEntry?.carriedFromDate === yesterday) return;
-
-      const yEntry = await db.daily.get(yesterday);
-      if (cancelled) return;
-
-      const base: DailyEntry =
-        (await db.daily.get(today)) ?? createEmptyDaily(today);
-      if (cancelled) return;
-
-      if (!yEntry) {
-        await saveDaily({ ...base, carriedFromDate: yesterday });
-        return;
-      }
-
-      const unchecked = yEntry.tasks.filter(
-        (t) => !t.done && t.title.trim(),
-      );
-      if (unchecked.length === 0) {
-        await saveDaily({ ...base, carriedFromDate: yesterday });
-        return;
-      }
-
-      const nextTasks = [...base.tasks];
-      for (const t of unchecked) {
-        const slotIdx = nextTasks.findIndex(
-          (x) => x.size === t.size && !x.title.trim() && !x.done,
-        );
-        const cloned: Task = {
-          id: cryptoId(),
-          size: t.size,
-          title: t.title,
-          done: false,
-        };
-        if (slotIdx >= 0) {
-          nextTasks[slotIdx] = cloned;
-        } else {
-          nextTasks.push({ ...cloned, size: "extra" });
-        }
-      }
-
-      await saveDaily({
-        ...base,
-        tasks: nextTasks,
-        carriedFromDate: yesterday,
-      });
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [date]);
 
   const doneCount = entry.tasks.filter((t) => t.done && t.title.trim()).length;
   const totalCount = entry.tasks.filter((t) => t.title.trim()).length;
