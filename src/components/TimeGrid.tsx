@@ -103,12 +103,19 @@ export function TimeGrid({
   function handlePointerDown(e: React.PointerEvent, i: number) {
     // 只处理主键/单指
     if (e.pointerType === "mouse" && e.button !== 0) return;
-    if (!paintMode) {
-      // 未选类别时，点击仅用于定位日志（页面会去对应行）
-      onPickSlot(i);
+
+    // 擦除：只擦色，不在日志区创建条目
+    if (paintMode === "erase") {
+      e.preventDefault();
+      startDrag(i);
       return;
     }
-    // 选了类别 / 擦除时，只涂色，不影响日志，避免页面意外滚动
+
+    // 未选类别 / 选了类别：都让日志区在该 slot 上定位或创建条目
+    // （日志 input 的 focus 已加 preventScroll: true，不会让页面跳到日志位置）
+    onPickSlot(i);
+
+    if (!paintMode) return;
     e.preventDefault();
     startDrag(i);
   }
