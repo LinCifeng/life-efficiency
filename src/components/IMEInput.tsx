@@ -24,10 +24,15 @@ type BaseInputProps = Omit<
 interface IMEInputProps extends BaseInputProps {
   value: string;
   onChange: (v: string) => void;
+  /** IME-aware 的 Enter 回调：在中文候选确认 Enter 时不会触发。 */
+  onEnter?: () => void;
 }
 
 export const IMEInput = forwardRef<HTMLInputElement, IMEInputProps>(
-  function IMEInput({ value, onChange, ...rest }, ref) {
+  function IMEInput(
+    { value, onChange, onEnter, onKeyDown, ...rest },
+    ref,
+  ) {
     const [local, setLocal] = useState(value);
     const composingRef = useRef(false);
 
@@ -52,6 +57,19 @@ export const IMEInput = forwardRef<HTMLInputElement, IMEInputProps>(
           const v = (e.target as HTMLInputElement).value;
           setLocal(v);
           onChange(v);
+        }}
+        onKeyDown={(e) => {
+          onKeyDown?.(e);
+          if (e.defaultPrevented) return;
+          if (
+            onEnter &&
+            e.key === "Enter" &&
+            !composingRef.current &&
+            !(e.nativeEvent as KeyboardEvent).isComposing
+          ) {
+            e.preventDefault();
+            onEnter();
+          }
         }}
       />
     );

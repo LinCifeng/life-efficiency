@@ -170,6 +170,52 @@ export function TaskBoard({
     ? tasks.find((t) => t.id === activeId) ?? null
     : null;
 
+  /** 全局任务顺序：big → medium → small → extra，便于回车跳到下一条。 */
+  const orderedIds = useMemo(
+    () => [
+      ...grouped.big.map((t) => t.id),
+      ...grouped.medium.map((t) => t.id),
+      ...grouped.small.map((t) => t.id),
+      ...grouped.extra.map((t) => t.id),
+    ],
+    [grouped],
+  );
+
+  function focusById(id: string) {
+    const el = document.querySelector<HTMLInputElement>(
+      `input[data-task-id="${id}"]`,
+    );
+    if (!el) return;
+    el.focus();
+    // 把光标放到末尾，方便接着写
+    const len = el.value.length;
+    el.setSelectionRange(len, len);
+  }
+
+  function handleEnter(currentId: string) {
+    const idx = orderedIds.indexOf(currentId);
+    if (idx < 0) return;
+    if (idx < orderedIds.length - 1) {
+      focusById(orderedIds[idx + 1]);
+      return;
+    }
+    // 已经是最后一个：新建一条 extra，等下一帧再 focus
+    onAddExtra();
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const all = document.querySelectorAll<HTMLInputElement>(
+          "input[data-task-id]",
+        );
+        const last = all[all.length - 1];
+        if (last) {
+          last.focus();
+          const len = last.value.length;
+          last.setSelectionRange(len, len);
+        }
+      });
+    });
+  }
+
   return (
     <DndContext
       sensors={sensors}
@@ -192,6 +238,7 @@ export function TaskBoard({
                 const rest = tasks.filter((t) => t.size !== size);
                 onChange([...rest, ...next]);
               }}
+              onEnter={handleEnter}
             />
           ))}
         </div>
@@ -206,6 +253,7 @@ export function TaskBoard({
                 onChange([...rest, ...next]);
               }}
               onAddExtra={size === "extra" ? onAddExtra : undefined}
+              onEnter={handleEnter}
             />
           ))}
         </div>
@@ -235,11 +283,13 @@ function Section({
   items,
   onChange,
   onAddExtra,
+  onEnter,
 }: {
   size: Size;
   items: Task[];
   onChange: (next: Task[]) => void;
   onAddExtra?: () => void;
+  onEnter?: (id: string) => void;
 }) {
   const meta = SECTION_META[size];
   return (
@@ -267,6 +317,7 @@ function Section({
             tasks={items}
             onChange={onChange}
             showEstimate={size !== "extra"}
+            onEnter={onEnter}
           />
         )}
       </SectionDroppable>

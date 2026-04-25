@@ -42,7 +42,7 @@ export interface TimeLog {
 export interface DailyEntry {
   date: string; // YYYY-MM-DD，主键
   slots: TimeSlot[]; // 长度 48
-  totalBudgetHours?: number; // 时间总预算
+  totalBudgetHours?: number; // 时间总预算（已废弃 UI，保留兼容老数据）
   budget: {
     personal?: number; // 小时
     work?: number;
@@ -51,6 +51,12 @@ export interface DailyEntry {
   tasks: Task[]; // 1 big + 3 medium + 5 small + N extra
   notes?: string; // 其他/临时任务
   timeLogs?: TimeLog[]; // 每半小时做了什么的记录
+  /** 每日复盘：亮点 / 不足 / 明日提醒 */
+  review?: {
+    highlight?: string;
+    improve?: string;
+    tomorrow?: string;
+  };
 }
 
 export interface EnergyEntry {

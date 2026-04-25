@@ -18,9 +18,9 @@ import {
   TimeSummary,
   type PaintMode,
 } from "@/components/TimeGrid";
-import { BudgetInput } from "@/components/BudgetInput";
 import { TaskBoard } from "@/components/TaskBoard";
 import { TimeLogList } from "@/components/TimeLogList";
+import { DailyReview } from "@/components/DailyReview";
 
 export default function TodayPage() {
   const [date, setDate] = useState(() => formatDate(new Date()));
@@ -90,14 +90,6 @@ export default function TodayPage() {
         onAddExtra={addExtra}
       />
 
-      {/* 可支配时间预估 */}
-      <section className="space-y-3">
-        <SectionLabel>可支配时间预估</SectionLabel>
-        <div className="card">
-          <BudgetInput value={entry} onChange={update} />
-        </div>
-      </section>
-
       {/* 24 小时时间格 */}
       <section className="space-y-3">
         <div className="flex items-center justify-between">
@@ -130,6 +122,14 @@ export default function TodayPage() {
             onChange={updateTimeLogs}
             onFocusSlot={setActiveSlot}
           />
+        </div>
+      </section>
+
+      {/* 每日复盘 */}
+      <section className="space-y-3">
+        <SectionLabel>每日复盘</SectionLabel>
+        <div className="card">
+          <DailyReview value={entry} onChange={update} />
         </div>
       </section>
 

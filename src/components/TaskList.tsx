@@ -12,11 +12,14 @@ export function TaskList({
   onChange,
   showEstimate = true,
   draggable = true,
+  onEnter,
 }: {
   tasks: Task[];
   onChange: (tasks: Task[]) => void;
   showEstimate?: boolean;
   draggable?: boolean;
+  /** 任务标题输入框按回车时触发，参数为当前任务 id。 */
+  onEnter?: (taskId: string) => void;
 }) {
   function patch(id: string, partial: Partial<Task>) {
     onChange(tasks.map((t) => (t.id === id ? { ...t, ...partial } : t)));
@@ -35,6 +38,7 @@ export function TaskList({
           showEstimate={showEstimate}
           draggable={draggable}
           onPatch={(p) => patch(t.id, p)}
+          onEnter={onEnter ? () => onEnter(t.id) : undefined}
         />
       ))}
     </ul>
@@ -46,11 +50,13 @@ function TaskRow({
   showEstimate,
   draggable,
   onPatch,
+  onEnter,
 }: {
   task: Task;
   showEstimate: boolean;
   draggable: boolean;
   onPatch: (p: Partial<Task>) => void;
+  onEnter?: () => void;
 }) {
   const sortable = useSortable({ id: task.id, disabled: !draggable });
   const {
@@ -124,6 +130,8 @@ function TaskRow({
         <IMEInput
           value={task.title}
           onChange={(v) => onPatch({ title: v })}
+          onEnter={onEnter}
+          data-task-id={task.id}
           placeholder="我选择做……"
           className={clsx(
             "flex-1 bg-transparent py-1 text-[15px] leading-6 outline-none placeholder:text-[color:var(--fg-soft)]",
