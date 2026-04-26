@@ -4,12 +4,17 @@
  * 135 任务拖拽看板：四个分区（big / medium / small / extra）。
  *
  * 设计原则：1 / 3 / 5 这三个固定槽位的数量绝不能因为拖动而改变。
- * 因此跨 size 的拖动一律按「swap 交换」处理——
- *   - active 接管 over 的 size 与位置；
- *   - over 反向接管 active 原本的 size 与位置。
- * 这样数量始终保持：big = 1, medium = 3, small = 5；extra 自由增减。
  *
- * 同 size 内拖动则是普通 reorder。
+ * big / medium / small 三档统一视为一条 9 格的优先级序列：
+ *   [big, m0, m1, m2, s0, s1, s2, s3, s4]
+ * 跨档拖动 = 把这条序列里的某一格拿出来再插到目标位置，中间的元素整体顺移。
+ * 这条逻辑和"调整优先级"的心智一致——
+ *   - 把 small 提到 big：原 big、medium 们整体降一档；
+ *   - 把 big 降到 small：原 medium、small 们整体升一档。
+ * 同档内拖动是这条逻辑的特例（splice 在同档区间内重排），无需特判。
+ *
+ * extra 区数量可变，是溢出/临时区，和三档之间继续走 swap 语义，
+ * 避免被卷入"必须保持 1/3/5"的链式顺移。
  */
 
 import {
@@ -32,6 +37,28 @@ import { SectionLabel } from "@/components/SectionLabel";
 
 type Size = Task["size"];
 const SIZES: Size[] = ["big", "medium", "small", "extra"];
+type FixedSize = "big" | "medium" | "small";
+const FIXED_SIZES: FixedSize[] = ["big", "medium", "small"];
+
+/** 9 格固定优先级序列在展平数组里每个 size 占据的最后一个 index。 */
+const SLOT_LAST_IDX: Record<FixedSize, number> = {
+  big: 0,
+  medium: 3,
+  small: 8,
+};
+
+/** 把展平后的 9 个 task 重新切片成 big / medium / small 三档，并刷新 size 字段。 */
+function reshapeFlat(flat: Task[]): {
+  big: Task[];
+  medium: Task[];
+  small: Task[];
+} {
+  return {
+    big: flat.slice(0, 1).map((t) => ({ ...t, size: "big" as const })),
+    medium: flat.slice(1, 4).map((t) => ({ ...t, size: "medium" as const })),
+    small: flat.slice(4, 9).map((t) => ({ ...t, size: "small" as const })),
+  };
+}
 
 const SECTION_META: Record<
   Size,
@@ -114,9 +141,9 @@ export function TaskBoard({
       : findContainer(overId);
     if (!overSize) return;
 
-    if (activeSize === overSize) {
-      // 同容器：reorder
-      const arr = grouped[activeSize];
+    // ========== 1) extra 内部 reorder ==========
+    if (activeSize === "extra" && overSize === "extra") {
+      const arr = grouped.extra;
       const fromIdx = arr.findIndex((t) => t.id === activeId);
       const toIdx = overIsContainer
         ? arr.length - 1
@@ -125,39 +152,56 @@ export function TaskBoard({
       const next = [...arr];
       const [moved] = next.splice(fromIdx, 1);
       next.splice(toIdx, 0, moved);
-      rebuild({ [activeSize]: next });
+      rebuild({ extra: next });
       return;
     }
 
-    /**
-     * 跨容器：严格 swap，保证 1/3/5 槽位数量不变。
-     *
-     * 落点确定：
-     *  - 落到具体任务（overId 是任务 id）：与该任务交换。
-     *  - 落到容器空白（overId 是 size 名）：和目标容器最后一条任务交换；
-     *    如果目标容器为空（只可能是 extra），则禁止该次拖动（直接 return）。
-     */
-    const fromArr = grouped[activeSize];
-    const toArr = grouped[overSize];
-    const fromIdx = fromArr.findIndex((t) => t.id === activeId);
+    // ========== 2) 涉及 extra 的跨档拖动：保持 swap ==========
+    // extra 数量可变，不参与三档的链式顺移；和三档之间互拖按交换处理，
+    // 既保证 1/3/5 数量不变，又允许 extra 任务"晋级"或三档任务"降级"。
+    if (activeSize === "extra" || overSize === "extra") {
+      const fromArr = grouped[activeSize];
+      const toArr = grouped[overSize];
+      const fromIdx = fromArr.findIndex((t) => t.id === activeId);
+      if (fromIdx < 0) return;
+      const toIdx = overIsContainer
+        ? toArr.length - 1
+        : toArr.findIndex((t) => t.id === overId);
+      if (toIdx < 0) return; // 空容器（只可能是 extra），禁止跨入避免丢槽位
+      const a = fromArr[fromIdx];
+      const b = toArr[toIdx];
+      const newFromArr = [...fromArr];
+      const newToArr = [...toArr];
+      newToArr[toIdx] = { ...a, size: overSize };
+      newFromArr[fromIdx] = { ...b, size: activeSize };
+      rebuild({ [activeSize]: newFromArr, [overSize]: newToArr });
+      return;
+    }
+
+    // ========== 3) big / medium / small 之间：链式顺移 ==========
+    // 把三档展平成 9 格优先级序列，标准 splice 重排。
+    // 这样：
+    //   - 把 small 提到 big → 原 big/medium 们整体降一档；
+    //   - 把 big 降到 small → 原 medium/small 们整体升一档；
+    //   - 同档内拖动 → 是这条逻辑的特例，自然包含。
+    const flat: Task[] = [
+      ...grouped.big,
+      ...grouped.medium,
+      ...grouped.small,
+    ];
+    const fromIdx = flat.findIndex((t) => t.id === activeId);
     if (fromIdx < 0) return;
 
     const toIdx = overIsContainer
-      ? toArr.length - 1
-      : toArr.findIndex((t) => t.id === overId);
-    if (toIdx < 0) return; // 空容器，禁止跨入
+      ? SLOT_LAST_IDX[overSize as FixedSize]
+      : flat.findIndex((t) => t.id === overId);
+    if (toIdx < 0 || fromIdx === toIdx) return;
 
-    const a = fromArr[fromIdx];
-    const b = toArr[toIdx];
+    const next = [...flat];
+    const [moved] = next.splice(fromIdx, 1);
+    next.splice(toIdx, 0, moved);
 
-    const newFromArr = [...fromArr];
-    const newToArr = [...toArr];
-    // a 接管 over 位置 + over 的 size
-    newToArr[toIdx] = { ...a, size: overSize };
-    // b 接管 active 原位置 + active 的 size
-    newFromArr[fromIdx] = { ...b, size: activeSize };
-
-    rebuild({ [activeSize]: newFromArr, [overSize]: newToArr });
+    rebuild(reshapeFlat(next));
   }
 
   /**
