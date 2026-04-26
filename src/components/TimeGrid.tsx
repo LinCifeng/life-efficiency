@@ -192,10 +192,11 @@ export function TimeGrid({
                   );
                 })}
               </div>
-              {/* 每个小时下方居中只写一个整点数字 */}
+              {/* 整点数字贴在这对格子的左下角，正好对齐到该小时的 00 分那一格，
+                  视觉上"小时开始处"和数字同位，符合"时间从这里起算"的直觉。 */}
               <div className="mt-1 flex gap-2 text-[10px] tabular-nums text-[color:var(--fg-soft)]">
                 {[0, 1, 2, 3].map((p) => (
-                  <div key={p} className="flex-1 text-center">
+                  <div key={p} className="flex-1 text-left">
                     {String(band.start + p).padStart(2, "0")}
                   </div>
                 ))}
