@@ -27,10 +27,11 @@ import {
   useSensor,
   useSensors,
   type DragEndEvent,
+  type DragOverEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { SortableContext, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Task } from "@/lib/db";
 import { TaskList } from "@/components/TaskList";
 import { SectionLabel } from "@/components/SectionLabel";
@@ -58,6 +59,114 @@ function reshapeFlat(flat: Task[]): {
     medium: flat.slice(1, 4).map((t) => ({ ...t, size: "medium" as const })),
     small: flat.slice(4, 9).map((t) => ({ ...t, size: "small" as const })),
   };
+}
+
+/**
+ * 基于"输入 base tasks + active/over"算出"假设松手"后的新 tasks 数组
+ * （按 big → medium → small → extra 顺序拼接）。
+ *
+ * 拖动期间会用它实时驱动 localTasks 重排 → 出现"其他任务顺移"动画；
+ * 松手时再用一次同样的算法计算最终结果并 commit 给外部 onChange。
+ *
+ * 跨档语义：
+ *  - extra 内部 / extra ↔ 三档：swap（保持 1/3/5 数量稳定）；
+ *  - big / medium / small 三档之间：链式顺移（splice 在 9 格序列里）。
+ */
+function computeNext(
+  base: Task[],
+  activeIdRaw: string | number | undefined | null,
+  overIdRaw: string | number | undefined | null,
+): Task[] | null {
+  if (activeIdRaw == null || overIdRaw == null) return null;
+  const activeId = String(activeIdRaw);
+  const overId = String(overIdRaw);
+  if (activeId === overId) return null;
+
+  const grouped: Record<Size, Task[]> = {
+    big: [],
+    medium: [],
+    small: [],
+    extra: [],
+  };
+  for (const t of base) grouped[t.size].push(t);
+
+  const findContainer = (id: string): Size | null => {
+    if (SIZES.includes(id as Size)) return id as Size;
+    for (const s of SIZES) {
+      if (grouped[s].some((t) => t.id === id)) return s;
+    }
+    return null;
+  };
+
+  const activeSize = findContainer(activeId);
+  if (!activeSize) return null;
+  const overIsContainer = SIZES.includes(overId as Size);
+  const overSize = overIsContainer
+    ? (overId as Size)
+    : findContainer(overId);
+  if (!overSize) return null;
+
+  const concat = (g: Record<Size, Task[]>) => [
+    ...g.big,
+    ...g.medium,
+    ...g.small,
+    ...g.extra,
+  ];
+
+  // 1) extra 内部 reorder
+  if (activeSize === "extra" && overSize === "extra") {
+    const arr = grouped.extra;
+    const fromIdx = arr.findIndex((t) => t.id === activeId);
+    const toIdx = overIsContainer
+      ? arr.length - 1
+      : arr.findIndex((t) => t.id === overId);
+    if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return null;
+    const next = [...arr];
+    const [moved] = next.splice(fromIdx, 1);
+    next.splice(toIdx, 0, moved);
+    return concat({ ...grouped, extra: next });
+  }
+
+  // 2) 涉及 extra 的跨档：swap
+  if (activeSize === "extra" || overSize === "extra") {
+    const fromArr = grouped[activeSize];
+    const toArr = grouped[overSize];
+    const fromIdx = fromArr.findIndex((t) => t.id === activeId);
+    if (fromIdx < 0) return null;
+    const toIdx = overIsContainer
+      ? toArr.length - 1
+      : toArr.findIndex((t) => t.id === overId);
+    if (toIdx < 0) return null;
+    const a = fromArr[fromIdx];
+    const b = toArr[toIdx];
+    const newFromArr = [...fromArr];
+    const newToArr = [...toArr];
+    newToArr[toIdx] = { ...a, size: overSize };
+    newFromArr[fromIdx] = { ...b, size: activeSize };
+    return concat({
+      ...grouped,
+      [activeSize]: newFromArr,
+      [overSize]: newToArr,
+    });
+  }
+
+  // 3) big / medium / small 三档：链式顺移（9 格序列上的 splice）
+  const flat: Task[] = [
+    ...grouped.big,
+    ...grouped.medium,
+    ...grouped.small,
+  ];
+  const fromIdx = flat.findIndex((t) => t.id === activeId);
+  if (fromIdx < 0) return null;
+  const toIdx = overIsContainer
+    ? SLOT_LAST_IDX[overSize as FixedSize]
+    : flat.findIndex((t) => t.id === overId);
+  if (toIdx < 0 || fromIdx === toIdx) return null;
+  const next = [...flat];
+  const [moved] = next.splice(fromIdx, 1);
+  next.splice(toIdx, 0, moved);
+  const reshaped = reshapeFlat(next);
+  return concat({ ...grouped, ...reshaped });
 }
 
 const SECTION_META: Record<
@@ -105,121 +214,74 @@ export function TaskBoard({
     }),
   );
 
+  /**
+   * 拖动期间的本地视图。dnd-kit 多容器拖动要在 onDragOver 实时
+   * 改 state 让 DOM 顺序立即变化，被挤的任务才会自然出现 transform 动画
+   * （也就是用户要的"其他条目移动有动画"）。
+   *
+   * - 没在拖动时：localTasks 跟 props.tasks 同步；
+   * - 拖动中：localTasks 是"假设松手后"的预演；
+   * - 松手时：用同样的算法再算一遍，commit 给外部 onChange。
+   *
+   * dragBaseRef 记录 dragstart 时的 tasks 快照，作为 computeNext 的输入；
+   * 这样 onDragOver 不会基于上一帧已经 reorder 的 localTasks 反复 splice。
+   */
+  const [localTasks, setLocalTasks] = useState<Task[]>(tasks);
+  const dragBaseRef = useRef<Task[] | null>(null);
+
+  useEffect(() => {
+    if (dragBaseRef.current == null) setLocalTasks(tasks);
+  }, [tasks]);
+
+  const displayedTasks = dragBaseRef.current ? localTasks : tasks;
+
   // 按 size 分桶 & 保留原顺序
   const grouped: Record<Size, Task[]> = useMemo(() => {
     const g: Record<Size, Task[]> = { big: [], medium: [], small: [], extra: [] };
-    for (const t of tasks) g[t.size].push(t);
+    for (const t of displayedTasks) g[t.size].push(t);
     return g;
-  }, [tasks]);
-
-  function findContainer(id: string): Size | null {
-    if (SIZES.includes(id as Size)) return id as Size;
-    for (const s of SIZES) {
-      if (grouped[s].some((t) => t.id === id)) return s;
-    }
-    return null;
-  }
+  }, [displayedTasks]);
 
   function handleDragStart(e: DragStartEvent) {
     setActiveId(String(e.active.id));
+    dragBaseRef.current = tasks;
+    setLocalTasks(tasks);
+  }
+
+  function handleDragOver(e: DragOverEvent) {
+    if (!dragBaseRef.current) return;
+    const next = computeNext(
+      dragBaseRef.current,
+      e.active.id,
+      e.over?.id ?? null,
+    );
+    if (next) setLocalTasks(next);
   }
 
   function handleDragEnd(e: DragEndEvent) {
-    const { active, over } = e;
+    const base = dragBaseRef.current;
+    dragBaseRef.current = null;
     setActiveId(null);
-    if (!over || active.id === over.id) return;
-
-    const activeId = String(active.id);
-    const overId = String(over.id);
-
-    const activeSize = findContainer(activeId);
-    if (!activeSize) return;
-
-    const overIsContainer = SIZES.includes(overId as Size);
-    const overSize = overIsContainer
-      ? (overId as Size)
-      : findContainer(overId);
-    if (!overSize) return;
-
-    // ========== 1) extra 内部 reorder ==========
-    if (activeSize === "extra" && overSize === "extra") {
-      const arr = grouped.extra;
-      const fromIdx = arr.findIndex((t) => t.id === activeId);
-      const toIdx = overIsContainer
-        ? arr.length - 1
-        : arr.findIndex((t) => t.id === overId);
-      if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return;
-      const next = [...arr];
-      const [moved] = next.splice(fromIdx, 1);
-      next.splice(toIdx, 0, moved);
-      rebuild({ extra: next });
-      return;
+    if (!base) return;
+    const next = computeNext(base, e.active.id, e.over?.id ?? null);
+    if (next) {
+      setLocalTasks(next);
+      onChange(next);
+    } else {
+      // 没有有效目标 → 还原
+      setLocalTasks(tasks);
     }
-
-    // ========== 2) 涉及 extra 的跨档拖动：保持 swap ==========
-    // extra 数量可变，不参与三档的链式顺移；和三档之间互拖按交换处理，
-    // 既保证 1/3/5 数量不变，又允许 extra 任务"晋级"或三档任务"降级"。
-    if (activeSize === "extra" || overSize === "extra") {
-      const fromArr = grouped[activeSize];
-      const toArr = grouped[overSize];
-      const fromIdx = fromArr.findIndex((t) => t.id === activeId);
-      if (fromIdx < 0) return;
-      const toIdx = overIsContainer
-        ? toArr.length - 1
-        : toArr.findIndex((t) => t.id === overId);
-      if (toIdx < 0) return; // 空容器（只可能是 extra），禁止跨入避免丢槽位
-      const a = fromArr[fromIdx];
-      const b = toArr[toIdx];
-      const newFromArr = [...fromArr];
-      const newToArr = [...toArr];
-      newToArr[toIdx] = { ...a, size: overSize };
-      newFromArr[fromIdx] = { ...b, size: activeSize };
-      rebuild({ [activeSize]: newFromArr, [overSize]: newToArr });
-      return;
-    }
-
-    // ========== 3) big / medium / small 之间：链式顺移 ==========
-    // 把三档展平成 9 格优先级序列，标准 splice 重排。
-    // 这样：
-    //   - 把 small 提到 big → 原 big/medium 们整体降一档；
-    //   - 把 big 降到 small → 原 medium/small 们整体升一档；
-    //   - 同档内拖动 → 是这条逻辑的特例，自然包含。
-    const flat: Task[] = [
-      ...grouped.big,
-      ...grouped.medium,
-      ...grouped.small,
-    ];
-    const fromIdx = flat.findIndex((t) => t.id === activeId);
-    if (fromIdx < 0) return;
-
-    const toIdx = overIsContainer
-      ? SLOT_LAST_IDX[overSize as FixedSize]
-      : flat.findIndex((t) => t.id === overId);
-    if (toIdx < 0 || fromIdx === toIdx) return;
-
-    const next = [...flat];
-    const [moved] = next.splice(fromIdx, 1);
-    next.splice(toIdx, 0, moved);
-
-    rebuild(reshapeFlat(next));
   }
 
-  /**
-   * 用 partial 替换 grouped 中的部分桶，并按 big → medium → small → extra
-   * 重新拼回总数组。
-   */
-  function rebuild(partial: Partial<Record<Size, Task[]>>) {
-    const next: Record<Size, Task[]> = {
-      big: partial.big ?? grouped.big,
-      medium: partial.medium ?? grouped.medium,
-      small: partial.small ?? grouped.small,
-      extra: partial.extra ?? grouped.extra,
-    };
-    onChange([...next.big, ...next.medium, ...next.small, ...next.extra]);
+  function handleDragCancel() {
+    const base = dragBaseRef.current;
+    dragBaseRef.current = null;
+    setActiveId(null);
+    setLocalTasks(base ?? tasks);
   }
 
   const activeTask = activeId
-    ? tasks.find((t) => t.id === activeId) ?? null
+    ? displayedTasks.find((t) => t.id === activeId) ?? null
     : null;
 
   /** 全局任务顺序：big → medium → small → extra，便于回车跳到下一条。 */
@@ -273,8 +335,9 @@ export function TaskBoard({
       sensors={sensors}
       collisionDetection={closestCenter}
       onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
-      onDragCancel={() => setActiveId(null)}
+      onDragCancel={handleDragCancel}
     >
       {/* 双栏分配：左列 = 最重要 + 三个中等（~4 条），右列 = 五个小型 + 其他（~5 条以上），
           两列高度更接近，不会像一开始那样一个卡片极矮一个极高。 */}
