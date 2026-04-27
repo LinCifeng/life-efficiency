@@ -316,12 +316,36 @@ export function TaskBoard({
   }
 
   function handleDragOver(e: DragOverEvent) {
-    if (!dragBaseRef.current) return;
-    const next = computeNext(
-      dragBaseRef.current,
-      e.active.id,
-      e.over?.id ?? null,
+    const base = dragBaseRef.current;
+    if (!base) return;
+    const overIdRaw = e.over?.id;
+    if (overIdRaw == null) return;
+    const activeId = String(e.active.id);
+    const overId = String(overIdRaw);
+    if (activeId === overId) return;
+
+    // 同档拖动让 dnd-kit 的 SortableContext 自己给周围元素加 transform 预演。
+    // 我们这边只在"跨档"时改 localTasks 让 DOM 真的把 active 挪到目标容器里——
+    // 否则同档每帧都重排会和 sortable 自带的预演双重处理，看起来"抖一下又跳回"，
+    // 让用户感觉同档无法调整优先级。
+    const groupedBase: Record<Size, Task[]> = {
+      big: [],
+      medium: [],
+      small: [],
+      extra: [],
+    };
+    for (const t of base) groupedBase[t.size].push(t);
+    const activeSize = SIZES.find((s) =>
+      groupedBase[s].some((t) => t.id === activeId),
     );
+    const overIsContainer = SIZES.includes(overId as Size);
+    const overSize = overIsContainer
+      ? (overId as Size)
+      : SIZES.find((s) => groupedBase[s].some((t) => t.id === overId));
+    if (!activeSize || !overSize) return;
+    if (activeSize === overSize && !overIsContainer) return;
+
+    const next = computeNext(base, e.active.id, e.over?.id ?? null);
     if (next) setLocalTasks(next);
   }
 
