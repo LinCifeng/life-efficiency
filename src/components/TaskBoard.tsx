@@ -113,6 +113,73 @@ function computeNext(
     ...g.extra,
   ];
 
+  // 0) 覆盖空槽：over 是一个 title 为空的占位 task → 直接占用，不触发链式顺移。
+  //    用户心智：把"还没填的格子"当作可以直接落下的空位。
+  //    - active 是 extra：从 extra 移除（extra 数量 -1），over 位置写入 active 内容；
+  //    - active 是三档：和 over 交换位置（保留各自 size），active 原位置变成新的空槽，
+  //      数量仍 1/3/5。
+  //    跳过：active 自己也是空（拖空到空没意义）；over 是容器（不是具体 task）。
+  const overTask = !overIsContainer
+    ? (Object.values(grouped) as Task[][])
+        .flat()
+        .find((t) => t.id === overId) ?? null
+    : null;
+  const overIsEmptySlot =
+    overTask != null && overTask.title.trim() === "";
+  if (overIsEmptySlot) {
+    const activeTask = (Object.values(grouped) as Task[][])
+      .flat()
+      .find((t) => t.id === activeId);
+    const activeIsEmpty =
+      activeTask != null && activeTask.title.trim() === "";
+    if (activeTask && !activeIsEmpty) {
+      if (activeSize === "extra" && overSize !== "extra") {
+        const newExtra = grouped.extra.filter((t) => t.id !== activeId);
+        const toArr = grouped[overSize];
+        const toIdx = toArr.findIndex((t) => t.id === overId);
+        if (toIdx >= 0) {
+          const newToArr = [...toArr];
+          newToArr[toIdx] = { ...activeTask, size: overSize };
+          return concat({
+            ...grouped,
+            extra: newExtra,
+            [overSize]: newToArr,
+          });
+        }
+      } else if (activeSize === overSize) {
+        // 同档：单纯调换 array 中两个位置
+        const arr = grouped[activeSize];
+        const fromIdx = arr.findIndex((t) => t.id === activeId);
+        const toIdx = arr.findIndex((t) => t.id === overId);
+        if (fromIdx >= 0 && toIdx >= 0 && fromIdx !== toIdx) {
+          const next = [...arr];
+          [next[fromIdx], next[toIdx]] = [next[toIdx], next[fromIdx]];
+          return concat({ ...grouped, [activeSize]: next });
+        }
+      } else {
+        // 跨档（包括 active 三档 / over extra 空，或 active extra / over extra 空，
+        // 以及三档之间一档 → 另一档的空槽）：swap，保留各自 size。
+        const fromArr = grouped[activeSize];
+        const toArr = grouped[overSize];
+        const fromIdx = fromArr.findIndex((t) => t.id === activeId);
+        const toIdx = toArr.findIndex((t) => t.id === overId);
+        if (fromIdx >= 0 && toIdx >= 0) {
+          const a = fromArr[fromIdx];
+          const b = toArr[toIdx];
+          const newFromArr = [...fromArr];
+          const newToArr = [...toArr];
+          newFromArr[fromIdx] = { ...b, size: activeSize };
+          newToArr[toIdx] = { ...a, size: overSize };
+          return concat({
+            ...grouped,
+            [activeSize]: newFromArr,
+            [overSize]: newToArr,
+          });
+        }
+      }
+    }
+  }
+
   // 1) extra 内部 reorder
   if (activeSize === "extra" && overSize === "extra") {
     const arr = grouped.extra;
